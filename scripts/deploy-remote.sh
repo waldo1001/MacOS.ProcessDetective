@@ -19,6 +19,7 @@ for a in "${@:2}"; do [ "$a" = "--no-build" ] && BUILD=0; done
 if [ "$BUILD" = 1 ]; then
   . "$ROOT/scripts/_lock.sh"
   acquire_lock "$ROOT"
+export PD_LOCK_HELD=1
   bash scripts/build-app.sh
 fi
 APP="$ROOT/ProcessDetective.app"
@@ -52,7 +53,7 @@ set -e
 APP="$HOME/Applications/ProcessDetective.app"
 xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
 # A Developer ID signature is valid everywhere — never replace it with ad-hoc.
-if codesign -dv "$APP" 2>&1 | grep -q "Authority=Developer ID Application"; then
+if codesign -dvv "$APP" 2>&1 | grep -q "Authority=Developer ID Application"; then
   echo "  Developer ID signed build — keeping signature."
 else
   codesign --force --options runtime --sign - --entitlements /dev/stdin "$APP/Contents/MacOS/node" >/dev/null 2>&1 <<'ENT' || true

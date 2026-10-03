@@ -4,3 +4,4 @@ ProcessDetective.app/
 *.log
 .DS_Store
 release/
+.deploy.lock/

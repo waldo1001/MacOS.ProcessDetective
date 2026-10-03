@@ -15,6 +15,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 . "$ROOT/scripts/_lock.sh"
 acquire_lock "$ROOT"
+export PD_LOCK_HELD=1
 
 PROFILE="PD-notary"
 IDENTITY=""
@@ -58,7 +59,10 @@ ditto -c -k --keepParent "$APP" "$ZIP"
 
 echo "› Submitting to Apple notary service (this usually takes 1–5 minutes)…"
 LOG="$OUT/notarize-$VERSION.log"
-if ! xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait 2>&1 | tee "$LOG" | grep -q "status: Accepted"; then
+# No grep -q in the pipeline: it closes the pipe on first match, tee dies with
+# SIGPIPE, and pipefail reports a failure for an accepted submission.
+xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait 2>&1 | tee "$LOG" || true
+if ! grep -q "status: Accepted" "$LOG"; then
   ID="$(grep -m1 -E '^\s*id:' "$LOG" | awk '{print $2}' || true)"
   echo "✗ Notarization not accepted. See $LOG" >&2
   [ -n "$ID" ] && echo "  Details:  xcrun notarytool log $ID --keychain-profile $PROFILE" >&2

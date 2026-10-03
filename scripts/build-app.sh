@@ -13,6 +13,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 APP="$ROOT/ProcessDetective.app"
+
+# Never wipe the bundle while another build/deploy/notarization is using it.
+# Callers that already hold the lock (install-app.sh, deploy-remote.sh,
+# notarize.sh) set PD_LOCK_HELD=1 so we do not deadlock on our own lock.
+if [ "${PD_LOCK_HELD:-0}" != "1" ]; then
+  . "$ROOT/scripts/_lock.sh"
+  acquire_lock "$ROOT"
+fi
 NODE="${PD_NODE:-$(command -v node || true)}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 VERSION="$(node -p "require('./package.json').version")"

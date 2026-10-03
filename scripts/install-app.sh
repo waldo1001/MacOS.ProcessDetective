@@ -15,6 +15,7 @@ cd "$ROOT"
 # bundle, which would otherwise vanish underneath a concurrent copy.
 . "$ROOT/scripts/_lock.sh"
 acquire_lock "$ROOT"
+export PD_LOCK_HELD=1
 
 DEST="$HOME/Applications"
 BUILD=1
