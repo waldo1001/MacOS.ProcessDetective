@@ -1,0 +1,4 @@
+tmutil: latestbackup requires Full Disk Access privileges.
+To allow this operation, select Full Disk Access in the Privacy
+tab of the Security & Privacy preference pane, and add Terminal
+to the list of applications which are allowed Full Disk Access.

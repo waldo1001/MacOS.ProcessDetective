@@ -57,8 +57,8 @@ Control** dashboard, and shuts the server down when you quit. Requires Node and
 the Xcode Command Line Tools (`xcode-select --install`).
 
 The dashboard ("Mission Control") has a sidebar with eight sections — **Overview,
-CPU, Memory, Energy, Disk, Network, Processes,** and a **Process detail** view —
-keyboard navigation (`1`–`7`, `g`+letter, `/` to search, `↑/↓`/`Enter`, `Space`
+CPU, Memory, Energy, Disk, Network, Processes, Health** — plus a **Process detail**
+view, and keyboard navigation (`1`–`8`, `g`+letter, `/` to search, `↑/↓`/`Enter`, `Space`
 to pause), light/dark, and a **session-scoped live history**. The visual design
 comes from a handoff spec; per-core utilization is shown as *estimated* and a few
 metrics (fan RPM, per-process disk/network bytes) appear as "requires elevated
@@ -82,6 +82,70 @@ An on-demand **⚙ Per-container CPU** button POSTs to `POST /api/docker` (calls
 Entirely **read-only** — only `docker ps` and `docker stats` are ever called.
 No containers are touched. Docker CLI is auto-discovered without requiring `sudo`
 (checks OrbStack path `~/.orbstack/bin/docker` and standard fallback paths).
+
+### Health check
+
+The **Health** section (key `8`, `g h`) answers *"is this Mac healthy, and what is
+clutter?"* in one click, where the other sections answer *"why is this process hot?"*.
+It shows a **verdict**, a strip of **vitals** (memory, swap, pressure, load, uptime,
+thermal, battery, disk, crashes, local snapshots), **findings** grouped by area, and a
+**Reclaimable** table of disk clutter with a safety class per row. **Copy report**,
+**Copy AI prompt** and **Copy findings (.md)** put the result on the clipboard.
+
+```bash
+pdetective health                       # quick check, plain-text report
+pdetective health --full                # + the disk-clutter survey (read-only, about a minute)
+pdetective health --json                # the HealthReport as JSON
+pdetective health --md ~/health.md      # write the findings as markdown, print the path
+pdetective health --no-cache            # re-run the slow checks instead of using the cache
+pdetective health --login-items         # also check login items (macOS asks for Touch ID / password)
+```
+
+**The verdict is decided by vitals, never by clutter.** `sick`: a `risk` in vitals or
+stability (memory pressure or swap + low free memory, a crash loop, a thermal limit, under 5 %
+disk). `degraded`: a warning in vitals, stability, processes or backup. `cluttered`: no such
+problem, but 20 GiB or more of regenerable/orphaned clutter, or a warning about startup items,
+tooling or pending updates. Otherwise `healthy` — 1.3 TB free with 250 GB of junk is healthy.
+
+What it checks: memory/swap/pressure, free disk (the `Available` column — see below), thermal
+throttling, battery health, crash reports and crash loops, runaway log files, APFS local
+snapshots, dangling launch agents, duplicate or leaked helper processes, conflicting Node.js
+installs, Homebrew, pending macOS updates and Time Machine. Slow checks (software update,
+Time Machine, Homebrew) are **cached and refreshed in the background**; the page shows their last
+result as "as of 2 h ago" and never waits for them. A full scan force-refreshes them.
+
+**Login items are on demand.** They come from the Background Task Management database
+(`sfltool dumpbtm` — no AppleScript), and macOS guards that database with an administrator
+authorization on *every* read: a Touch ID / password dialog. So this check never runs on its own
+— not when the section opens, not in the background, not in a full scan. Click **Check login
+items** (or pass `--login-items`) and approve the dialog; the result is kept and shown with its
+age. `PD_NO_ELEVATED=1` disables it.
+
+**Time Machine is never mounted.** `tmutil latestbackup` makes macOS mount an unmounted backup
+destination (it connects to the NAS share and attaches the backup image). Health therefore asks
+for the last backup only when the backup volume is *already* mounted; otherwise it says "not
+verified" and points at System Settings. macOS also only answers apps with Full Disk Access. Every
+finding has an expandable **Evidence** block with the exact command and the output that justifies
+it. `docs/health-checks.md` lists every check, its command and what triggers each severity.
+
+**The snapshot gotcha.** Deleting files does not free space while APFS local Time Machine
+snapshots still hold them, so `df` does not move. Health reports the snapshot count and the
+(no-elevated-rights) command to thin them: `tmutil thinlocalsnapshots / 999999999999 4`.
+
+**Read-only.** This phase only reads; fixes are printed as steps for you to run. The one file it
+writes is the cache, `health-cache.json` in `$PD_DATA_DIR` (default
+`~/Library/Application Support/ProcessDetective/`).
+
+**Permission prompts.** A full scan lists `~/Downloads` and measures folders inside other apps'
+containers (OrbStack, Docker Desktop, the wallpaper cache); macOS may ask whether Process
+Detective can access them. If it is left unanswered the measurement times out and that entry is
+shown under **Skipped** — never as "0 B". Granting Full Disk Access removes the folder prompts.
+`PD_HEALTH_SKIP=id,id` leaves checks or clutter-catalog entries out entirely (for example
+`PD_HEALTH_SKIP=wallpaper-cache,software-update`).
+
+Endpoints: `GET /api/health` (quick, ≤ 5 s), `POST /api/health/scan` (starts the full scan, returns
+a job id), `GET /api/health/scan/:jobId`, `GET /api/health/report?format=text|prompt|md`,
+`POST /api/health/check/login-items` (the on-demand check; raises the macOS dialog).
 
 ### History persistence
 
@@ -168,6 +232,7 @@ npm run dev -- <command>
 | `tree --pid <PID>` | The process subtree rooted at a PID |
 | `inspect <PID>` | Full detail for one process (chain, children, cwd, ports, scripts) |
 | `report <PID>` | Copy-friendly "CPU spike investigation" diagnostic |
+| `health [--full] [--json] [--md <file>] [--no-cache]` | Mac health check: verdict, vitals, findings, reclaimable clutter |
 | `prompt <PID>` | Print a ready-to-paste investigation prompt for your AI agent |
 | `watch --threshold 80` | Live refresh, highlights spikes, keeps recent-spike history |
 
@@ -421,6 +486,11 @@ src/
              interpret.ts    combine into one interpretation
   render/    top.ts tree.ts inspect.ts format.ts   (terminal-only)
   report/    report.ts    plain-text diagnostic (copy/paste safe)
+             health.ts    health report / AI prompt / markdown findings
+  health/    engine.ts    collectHealth, cache-aware quick/full modes, full-scan job
+             checks/      one file per check (pure parsers + runner), see docs/health-checks.md
+             catalog.ts   the curated clutter catalog + Application Support owner map
+             verdict.ts   verdict rules, reclaimable totals (leaves only), finding order
   service.ts              snapshot / enrich / hotProcesses orchestration
   cli.ts  index.ts        commander wiring + bin entry
 ```

@@ -1,0 +1,7 @@
+1310720	/Users/test/Library/Caches/com.apple.Safari
+du: /Users/test/Library/Caches/com.apple.HomeKit: Operation not permitted
+819200	/Users/test/Library/Caches/Google
+524288	/Users/test/Library/Caches/Microsoft Edge
+40960	/Users/test/Library/Caches/com.spotify.client
+8192	/Users/test/Library/Caches/node-gyp
+2703360	/Users/test/Library/Caches

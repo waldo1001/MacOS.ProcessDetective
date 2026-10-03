@@ -1,0 +1,7 @@
+/Users/waldo/.nvm/versions/node/v20.20.2/bin/node
+/opt/homebrew/bin/node
+/usr/local/bin/node
+/opt/homebrew/bin/node
+/Users/waldo/.nvm/versions/node/v20.20.2/bin/node
+/Users/waldo/.nvm/versions/node/v22.22.3/bin/node
+/Users/waldo/.nvm/versions/node/v22.23.1/bin/node

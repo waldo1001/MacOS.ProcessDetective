@@ -112,6 +112,22 @@
   .tbl-h button.on { color:var(--acc); }
   .tbl-r { padding:6px 8px; border-bottom:1px solid var(--bd); cursor:pointer; }
   .tbl-r:hover { background:var(--surf2); } .tbl-r.sel { background:var(--surf2); }
+
+  /* health */
+  .hsev { font:700 9px var(--mono); padding:2px 6px; border-radius:4px; border:1px solid currentColor; letter-spacing:.04em; white-space:nowrap; }
+  .hf { margin-bottom:8px; padding:10px 12px; }
+  .hf.hinfo { opacity:.78; }
+  .hf-top { display:flex; align-items:center; gap:9px; }
+  .hdetail { margin:5px 0 2px 0; font:500 12px/1.45 var(--sans); white-space:normal; }
+  .hf details { margin-top:6px; } .hf summary { cursor:pointer; user-select:none; }
+  .hcmd { font-size:11px; color:var(--acc); margin:6px 0 2px; word-break:break-all; }
+  .hpre { font-size:10.5px; background:var(--bg); padding:8px; border-radius:6px; overflow:auto; max-height:200px; margin:2px 0 6px; white-space:pre-wrap; word-break:break-all; }
+  .hsteps { margin-top:6px; }
+  .hrt-h, .hrt-r { display:grid; grid-template-columns:84px minmax(180px,2fr) minmax(160px,2fr) 92px 74px; gap:10px; align-items:center; padding:6px 8px; border-bottom:1px solid var(--bd); }
+  .hrt-h { font:600 10px var(--sans); letter-spacing:.07em; color:var(--mut); }
+  .hrt-h button { background:none; border:none; color:var(--acc); font:600 10px var(--sans); letter-spacing:.07em; text-align:left; padding:0; cursor:pointer; }
+  .hrt-r.dim { opacity:.5; }
+  .hpath { font-size:11px; word-break:break-all; }
 </style>
 </head>
 <body data-theme="dark">
@@ -156,6 +172,7 @@ const SECTIONS = [
   { id:"disk", label:"Disk", key:"d", icon:'<ellipse cx="8" cy="8" rx="6" ry="6"/><circle cx="8" cy="8" r="1.5"/>' },
   { id:"network", label:"Network", key:"n", icon:'<path d="M4 10l3-3 3 3M7 7v6M12 6l-3 3-3-3M9 9V3"/>' },
   { id:"processes", label:"Processes", key:"p", icon:'<path d="M2 4h12M2 8h12M2 12h8"/>' },
+  { id:"health", label:"Health", key:"h", icon:'<path d="M8 13.5S2 10 2 5.8A3 3 0 0 1 8 4.4 3 3 0 0 1 14 5.8C14 10 8 13.5 8 13.5Z"/><path d="M3 8h2.6l1.2-2.2 2 4.4 1.2-2.2H13"/>' },
 ];
 const WEB_PORTS = new Set([3000,3001,4200,5000,5173,5174,8000,8080,8081,9000]);
 const MEM_COLORS = { Wired:"var(--acc)", Active:"#2a8aa0", Compressed:"var(--warn)", Inactive:"#3a5566", Free:"var(--surf2)" };
@@ -187,6 +204,7 @@ const state = {
   fsChurnResult:null,     // last FsChurnSnapshot (null = not yet run)
   readMeasuring:false,    // true while POST /api/readdelta/:pid is in-flight
   readResult:null,        // last ReadActivitySnapshot (null = not yet run)
+  health:{ report:null, fetchedAt:0, loading:false, error:null, job:null, open:new Set(), sortDir:-1, refreshTries:0, pollT:null, refreshT:null, copies:[], busy:null },
 };
 const H = []; // system series: {t,cpu,cpuUser,mem,netRx,netTx,energy,diskR,diskW}
 const CH = []; // per-core: CH[i] = [{t,v}]
@@ -342,7 +360,7 @@ async function tick(){
       }catch(e){ seedHistory(sys, state.procs); }
     }
     pushHistory(sys, state.procs);
-    if(visible()) render(); // collect always; only touch the DOM when on screen
+    if(visible() && route.section!=="health") render(); // collect always; only touch the DOM when on screen (Health re-renders on its own events only)
   }catch(e){ /* keep last */ }
   reschedule();
 }
@@ -372,11 +390,13 @@ function parseHash(){
   return { section:sec, pid:null, prev:sec };
 }
 function onRoute(){
-  const r=parseHash(); const changedPid = r.pid!==route.pid;
+  const r=parseHash(); const changedPid = r.pid!==route.pid; const prevSection=route.section;
   route=r; state.sel=0;
   renderNav();
   if(route.section==="proc" && route.pid && changedPid) loadDetail(route.pid);
   render();
+  if(prevSection==="health" && route.section!=="health") healthLeave();
+  if(route.section==="health" && prevSection!=="health") healthEnter();
 }
 function go(section){ location.hash="#/"+section; }
 function openProc(pid){ location.hash="#/proc/"+pid; }
@@ -390,8 +410,8 @@ function renderNav(){
   $("navItems").querySelectorAll("[data-go]").forEach(el=>el.onclick=()=>go(el.dataset.go));
 }
 function render(){
-  if(!state.sys && route.section!=="proc"){ $("view").innerHTML='<div class="mut" style="padding:40px">Collecting…</div>'; return; }
-  const fn = { overview:rOverview, cpu:rCPU, memory:rMemory, energy:rEnergy, disk:rDisk, network:rNetwork, processes:rProcesses, proc:rDetail }[route.section];
+  if(!state.sys && route.section!=="proc" && route.section!=="health"){ $("view").innerHTML='<div class="mut" style="padding:40px">Collecting…</div>'; return; }
+  const fn = { overview:rOverview, cpu:rCPU, memory:rMemory, energy:rEnergy, disk:rDisk, network:rNetwork, processes:rProcesses, health:rHealth, proc:rDetail }[route.section];
   $("view").innerHTML = fn ? fn() : "";
   bindView();
 }
@@ -781,8 +801,173 @@ function rDetail(){
     +'<div id="aiOut" style="margin-top:12px"></div>';
 }
 
+// ---------- health ----------
+// Health is exempt from the 2s tick: it re-renders only when its own state changes
+// (fetch, scan progress, sort, ...), fetches only while the section is open and visible,
+// and keeps the open/closed state of Evidence blocks in state.health.open.
+const HEALTH_CATS = [["vitals","Vitals"],["stability","Stability"],["startup","Startup"],["processes","Processes"],["tooling","Tooling"],["updates","Updates"],["backup","Backup"]]; // clutter lives in the Reclaimable table
+const HEALTH_SEV = { risk:["RISK","crit"], warn:["WARN","warn"], advice:["ADVICE","acc"], info:["INFO","mut"] };
+const HEALTH_VERDICT = { healthy:"calm", cluttered:"acc", degraded:"warn", sick:"crit" };
+const HEALTH_SAFETY = { regenerates:"calm", orphan:"warn", ask:"acc", keep:"mut", manual:"mut" };
+const HEALTH_CAUTION = { regenerates:0, orphan:1, ask:2, manual:3, keep:4 };
+function hAgo(ts){ const d=Math.max(0,Math.floor((Date.now()-ts)/1000)); if(d<90)return d+" s ago"; if(d<5400)return Math.round(d/60)+" min ago"; if(d<172800)return Math.round(d/3600)+" h ago"; return Math.round(d/86400)+" d ago"; }
+function hTilde(p){ return String(p).replace(/^\/Users\/[^/]+/,"~"); }
+function hLabel(f){ return f.title.replace(/: [\d.]+ [KMGT]?B(?: in \d+ items)?$/,""); }
+function healthRender(){ if(route.section==="health") render(); }
+function healthClearTimers(){ const h=state.health; clearTimeout(h.pollT); clearTimeout(h.refreshT); h.pollT=null; h.refreshT=null; }
+function healthEnter(){
+  const h=state.health;
+  if(h.job && h.job.state==="running") healthPoll();
+  if(!h.report || Date.now()-h.fetchedAt>60000) healthFetch(true); else healthScheduleRefresh();
+}
+function healthLeave(){ healthClearTimers(); }
+async function healthFetch(user){
+  const h=state.health; if(h.loading) return;
+  h.loading=true; h.error=null; if(user) h.refreshTries=0; healthRender();
+  try{
+    const r=await fetchJSON("/api/health");
+    if(r && r.verdict){ h.report=r; h.fetchedAt=Date.now(); } else h.error=(r&&r.error)||"Unexpected response";
+  }catch(e){ h.error="Request failed"; }
+  h.loading=false; healthRender(); healthScheduleRefresh();
+}
+// Slow checks refresh in the background on the server: look again after 10s (at most 6 times).
+function healthScheduleRefresh(){
+  const h=state.health; clearTimeout(h.refreshT); h.refreshT=null;
+  if(route.section!=="health" || !visible()) return;
+  if(h.report && h.report.refreshing && h.report.refreshing.length && h.refreshTries<6 && !(h.job&&h.job.state==="running")){
+    h.refreshTries++; h.refreshT=setTimeout(()=>healthFetch(false),10000);
+  }
+}
+async function healthScan(){
+  const h=state.health; if(h.job && h.job.state==="running") return;
+  try{
+    const r=await fetchJSON("/api/health/scan",{method:"POST"});
+    if(!r || !r.jobId){ h.error="Could not start the scan"; healthRender(); return; }
+    h.job={ id:r.jobId, state:r.state, progress:{done:0,total:0,current:"starting"} }; healthRender(); healthPoll();
+  }catch(e){ h.error="Could not start the scan"; healthRender(); }
+}
+function healthPoll(){
+  const h=state.health; clearTimeout(h.pollT); h.pollT=null;
+  if(route.section!=="health" || !visible() || !h.job || h.job.state!=="running") return;
+  h.pollT=setTimeout(async()=>{
+    try{
+      const j=await fetchJSON("/api/health/scan/"+h.job.id);
+      if(j && j.state){ h.job=j; if(j.state==="done" && j.report){ h.report=j.report; h.fetchedAt=Date.now(); } }
+      else { h.job=null; h.error="The scan job is gone (did the server restart?)"; }
+    }catch(e){ /* keep polling */ }
+    healthRender(); healthPoll();
+  },1000);
+}
+// On-demand checks raise a macOS authorization dialog (Touch ID / password), so they run on an explicit click only.
+async function healthOnDemand(id){
+  const h=state.health; if(h.busy) return;
+  h.busy=id; h.error=null; healthRender();
+  try{
+    const r=await fetchJSON("/api/health/check/"+encodeURIComponent(id),{method:"POST"});
+    if(r && r.verdict){ h.report=r; h.fetchedAt=Date.now(); } else h.error=(r&&r.error)||"Unexpected response";
+  }catch(e){ h.error="Request failed"; }
+  h.busy=null; healthRender();
+}
+function hOnDemand(o){
+  const h=state.health, busy=h.busy===o.id;
+  return '<div class="card hf"><div class="hf-top"><span class="hsev acc">ON DEMAND</span><span class="nm">'+esc(o.label)+'</span>'
+    +'<span class="rsub" style="margin-left:auto;white-space:nowrap">'+(o.at?'last checked '+esc(hAgo(o.at)):'not checked yet')+'</span></div>'
+    +'<div class="rsub hdetail">'+esc(o.note)+'</div>'
+    +'<div style="margin-top:6px"><button class="btn" data-hod="'+esc(o.id)+'"'+(h.busy?' disabled':'')+'>'+(busy?'Waiting for your approval…':esc(o.label)+(o.at?' again':''))+'</button></div></div>';
+}
+async function healthCopy(fmt,msg){
+  try{ const t=await (await fetch("/api/health/report?format="+fmt)).text(); await navigator.clipboard.writeText(t); toast(msg); }
+  catch(e){ toast("Copy failed"); }
+}
+// Every finding's items, flattened. A row is a leaf unless another row lies inside it (not counted twice).
+function hRows(r){
+  const by=new Map();
+  r.findings.forEach(f=>(f.items||[]).forEach(it=>{ const p=by.get(it.path); if(!p || HEALTH_CAUTION[it.safety]>HEALTH_CAUTION[p.it.safety]) by.set(it.path,{it,f}); }));
+  const rows=[...by.values()];
+  rows.forEach(x=>{ const pre=x.it.path+"/"; x.leaf=!rows.some(o=>o!==x && o.it.path.startsWith(pre)); });
+  return rows;
+}
+function hFinding(f){
+  const h=state.health, sv=HEALTH_SEV[f.severity]||HEALTH_SEV.info, fid=f.id+"#ev";
+  const ev=(f.evidence||[]).map(e=>'<div class="mono hcmd">$ '+esc(e.command)+'</div>'+(e.excerpt?'<pre class="mono hpre">'+esc(e.excerpt)+'</pre>':'')).join("");
+  let steps="";
+  if(f.manualSteps && f.manualSteps.length){ h.copies.push(f.manualSteps.join("\n")); steps='<div class="hsteps"><pre class="mono hpre">'+esc(f.manualSteps.join("\n"))+'</pre><button class="btn" data-hcopy="'+(h.copies.length-1)+'">Copy steps</button></div>'; }
+  return '<div class="card hf'+(f.severity==="info"?" hinfo":"")+'"><div class="hf-top"><span class="hsev '+sv[1]+'">'+sv[0]+'</span><span class="nm">'+esc(f.title)+'</span>'
+    +(f.asOf?'<span class="rsub" style="margin-left:auto;white-space:nowrap">as of '+esc(hAgo(f.asOf))+'</span>':'')+'</div>'
+    +'<div class="rsub hdetail">'+esc(f.detail)+'</div>'
+    +(ev?'<details data-hid="'+esc(fid)+'"'+(h.open.has(fid)?" open":"")+'><summary class="rsub">Evidence</summary>'+ev+'</details>':'')
+    +steps+'</div>';
+}
+function hReclaim(r){
+  const h=state.health, rows=hRows(r);
+  const head='<div class="ctitle" style="margin-top:16px">RECLAIMABLE<span class="note">on-disk sizes · each path counted once</span></div>';
+  if(!rows.length) return '<div class="card">'+head.replace(' style="margin-top:16px"','')+'<div class="rsub" style="padding:4px 0">'+(r.fullScan.at?"Nothing above the size thresholds.":"Run a full scan to survey disk clutter (~1 min, read-only)")+'</div></div>';
+  rows.sort((a,b)=>(a.it.bytes-b.it.bytes)*h.sortDir);
+  const body=rows.map(x=>'<div class="hrt-r'+((x.it.safety==="keep"||!x.leaf)?" dim":"")+'"><span class="mono" style="font-size:12px">'+esc(fmtBytes(x.it.bytes))+'</span>'
+    +'<span class="mono hpath" title="'+esc(x.it.path)+'">'+esc(hTilde(x.it.path))+'</span>'
+    +'<span class="rsub" style="white-space:normal">'+esc(hLabel(x.f))+(x.it.note?' · '+esc(x.it.note):'')+(x.leaf?'':' · includes rows below')+'</span>'
+    +'<span class="hsev '+(HEALTH_SAFETY[x.it.safety]||"mut")+'" style="justify-self:start">'+esc(x.it.safety)+'</span>'
+    +'<span class="rsub">'+(x.it.lastModified?esc(hAgo(x.it.lastModified)):"—")+'</span></div>').join("");
+  const by=r.reclaimable.byClass;
+  const foot='<div class="rsub" style="padding:8px 8px 2px;white-space:normal">Total reclaimable <span class="calm" style="font-weight:700">'+esc(fmtBytes(r.reclaimable.total))+'</span> — regenerates '+esc(fmtBytes(by.regenerates))+' · orphan '+esc(fmtBytes(by.orphan))+' · ask '+esc(fmtBytes(by.ask))+' · keep '+esc(fmtBytes(by.keep))+' (not counted)</div>';
+  return '<div class="card" style="padding:6px 6px">'+head.replace(' style="margin-top:16px"',' style="padding:6px 8px 0"')
+    +'<div class="hrt-h"><button id="hsort">SIZE'+(h.sortDir<0?" ↓":" ↑")+'</button><span>PATH</span><span>WHAT</span><span>SAFE?</span><span>MODIFIED</span></div>'+body+foot+'</div>';
+}
+function rHealth(){
+  const h=state.health, r=h.report; h.copies=[];
+  const run=!!(h.job && h.job.state==="running");
+  const dis=r?"":" disabled";
+  const shead='<div class="shead"><h1>Health</h1><span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">'
+    +'<button class="btn" id="hcopyText"'+dis+'>Copy report</button><button class="btn" id="hcopyPrompt"'+dis+'>Copy AI prompt</button><button class="btn" id="hcopyMd"'+dis+'>Copy findings (.md)</button></span></div>';
+  if(!r) return shead+(h.error?'<div class="card"><span class="crit">'+esc(h.error)+'</span> <button class="btn" id="hrecheck" style="margin-left:10px">Try again</button></div>':'<div class="mut" style="padding:30px">Checking this Mac… the first run can take a few seconds.</div>');
+  const vc=HEALTH_VERDICT[r.verdict]||"mut";
+  const full=r.fullScan.at?hAgo(r.fullScan.at)+(r.fullScan.stale?" (stale)":""):"never";
+  const prog=run?'<div class="rsub" style="margin-top:6px">Scanning '+h.job.progress.done+'/'+h.job.progress.total+' · '+esc(h.job.progress.current)+'</div>'
+    :(h.job && h.job.state==="failed")?'<div class="rsub crit" style="margin-top:6px">Scan failed: '+esc(h.job.error||"unknown error")+'</div>':'';
+  const banner='<div class="card" style="margin-bottom:12px;border-color:var(--'+vc+')"><div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">'
+    +'<div style="flex:1;min-width:260px"><div class="lbl">VERDICT</div><div class="big '+vc+'" style="font-size:28px;text-transform:uppercase">'+esc(r.verdict)+'</div><div class="rsub" style="margin-top:4px;font-size:12px;white-space:normal">'+esc(r.verdictReason)+'</div></div>'
+    +'<div style="text-align:right"><div class="rsub">Checked '+esc(new Date(r.at).toLocaleTimeString())+' · '+(r.durationMs/1000).toFixed(1)+' s · Full scan: '+esc(full)+'</div>'
+    +'<div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="hrecheck"'+(h.loading?' disabled':'')+'>'+(h.loading?'Checking…':'Re-check')+'</button><button class="btn acc" id="hscan"'+(run?' disabled':'')+'>'+(run?'Scanning…':'Run full scan')+'</button></div>'+prog
+    +(h.error?'<div class="rsub crit" style="margin-top:6px">'+esc(h.error)+'</div>':'')+'</div></div></div>';
+  const v=r.vitals, dash='<span class="mut">—</span>';
+  const T=(l,val,sub,cls)=>'<div class="tile"><div class="lbl">'+l+'</div><span class="big '+(cls||"")+'" style="font-size:20px">'+val+'</span><div class="sub">'+sub+'</div></div>';
+  const tiles=[
+    T("Memory free", v.memFreePct==null?dash:v.memFreePct+" %", "pressure "+esc(v.pressure||"—"), v.memFreePct==null?"":v.memFreePct<10?"crit":v.memFreePct<25?"warn":"calm"),
+    T("Swap used", v.swapUsedBytes==null?dash:esc(fmtBytes(v.swapUsedBytes)), "&nbsp;"),
+    T("Pressure", v.pressure==null?dash:esc(v.pressure.toUpperCase()), "kernel level", v.pressure==="critical"?"crit":v.pressure==="warning"?"warn":v.pressure?"calm":""),
+    T("Load (1 min)", v.loadAvg1==null?dash:v.loadAvg1.toFixed(2), v.processCount==null?"&nbsp;":v.processCount+" processes"),
+    T("Uptime", v.uptimeSec==null?dash:fmtUp(v.uptimeSec), "&nbsp;"),
+    T("Thermal", v.thermalWarning==null?dash:v.thermalWarning?"THROTTLED":"NOMINAL", "pmset -g therm", v.thermalWarning?"crit":v.thermalWarning===false?"calm":""),
+    T("Battery", v.batteryCycles==null?dash:v.batteryCycles+" cycles", v.batteryHealthPct==null?"&nbsp;":v.batteryHealthPct+" % health"),
+    T("Disk free", v.diskFreeBytes==null?dash:esc(fmtBytes(v.diskFreeBytes)), v.diskTotalBytes==null?"&nbsp;":"of "+esc(fmtBytes(v.diskTotalBytes))),
+    T("Crashes (7 d)", v.crashes7d==null?dash:v.crashes7d, "&nbsp;", v.crashes7d>0?"warn":""),
+    T("Local snapshots", v.localSnapshots==null?dash:v.localSnapshots, "&nbsp;"),
+  ];
+  const byCat={}; r.findings.forEach(f=>{ (byCat[f.category]=byCat[f.category]||[]).push(f); });
+  const odCat={}; (r.onDemand||[]).forEach(o=>{ (odCat[o.category]=odCat[o.category]||[]).push(o); });
+  const fsec=HEALTH_CATS.filter(c=>byCat[c[0]]||odCat[c[0]]).map(c=>'<div class="ctitle" style="margin-top:14px">'+c[1].toUpperCase()+'</div>'+(byCat[c[0]]||[]).map(hFinding).join("")+(odCat[c[0]]||[]).map(hOnDemand).join("")).join("");
+  const skipped=(r.skipped&&r.skipped.length)?'<div class="card" style="margin-top:14px"><div class="ctitle">SKIPPED<span class="note">not checked — do not read these as clean</span></div>'
+    +r.skipped.map(s=>'<div class="rsub" style="padding:2px 0;white-space:normal"><span class="mono">'+esc(s.id)+'</span> · '+esc(s.reason)+'</div>').join("")+'</div>':'';
+  const refreshing=(r.refreshing&&r.refreshing.length)?'<div class="rsub" style="margin-top:10px">refreshing: '+esc(r.refreshing.join(", "))+'…</div>':'';
+  return shead+banner
+    +'<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:6px">'+tiles.join("")+'</div>'
+    +fsec+hReclaim(r)+skipped+refreshing;
+}
+function bindHealth(){
+  const h=state.health, on=(id,fn)=>{ const el=$(id); if(el) el.onclick=fn; };
+  on("hrecheck",()=>healthFetch(true)); on("hscan",healthScan);
+  on("hcopyText",()=>healthCopy("text","Health report copied"));
+  on("hcopyPrompt",()=>healthCopy("prompt","Prompt copied — paste into your agent"));
+  on("hcopyMd",()=>healthCopy("md","Findings (.md) copied"));
+  on("hsort",()=>{ h.sortDir*=-1; render(); });
+  $("view").querySelectorAll("[data-hod]").forEach(b=>b.onclick=()=>healthOnDemand(b.dataset.hod));
+  $("view").querySelectorAll("[data-hcopy]").forEach(b=>b.onclick=()=>{ navigator.clipboard.writeText(h.copies[+b.dataset.hcopy]||"").then(()=>toast("Steps copied")); });
+  $("view").querySelectorAll("details[data-hid]").forEach(d=>{ d.ontoggle=()=>{ if(d.open) h.open.add(d.dataset.hid); else h.open.delete(d.dataset.hid); }; });
+}
+
 // ---------- view bindings (post-render) ----------
 function bindAfter(){
+  if(route.section==="health") bindHealth();
   if(route.section==="processes"){
     const si=$("pd-search"); if(si){ si.oninput=()=>{ state.search=si.value; if(si.value)state.groupFilter=null; render(); si2focus(); }; }
     $("view").querySelectorAll("[data-sort]").forEach(b=>b.onclick=()=>{ if(state.sortKey===b.dataset.sort)state.sortDir*=-1; else{state.sortKey=b.dataset.sort; state.sortDir=b.dataset.sort==="name"?1:-1;} render(); });
@@ -893,7 +1078,7 @@ document.addEventListener("keydown",(e)=>{
   if(e.key===" "){ e.preventDefault(); setPaused(!state.paused); return; }
   if(gPending){ gPending=false; clearTimeout(gTimer); const s=SECTIONS.find(x=>x.key===e.key.toLowerCase()); if(s){go(s.id);return;} }
   if(e.key==="g"){ gPending=true; gTimer=setTimeout(()=>gPending=false,850); return; }
-  if(/^[1-7]$/.test(e.key)){ go(SECTIONS[+e.key-1].id); return; }
+  if(/^[1-8]$/.test(e.key)){ go(SECTIONS[+e.key-1].id); return; }
   if(route.section==="processes" && state._rows){ const n=Math.min(200,state._rows.length);
     if(e.key==="ArrowDown"){ state.sel=clamp(state.sel+1,0,n-1); render(); scrollSel(); }
     if(e.key==="ArrowUp"){ state.sel=clamp(state.sel-1,0,n-1); render(); scrollSel(); }
@@ -911,6 +1096,7 @@ $("rangeSel").querySelectorAll("button").forEach(b=>b.onclick=()=>setRange(b.dat
 
 // ---------- lifecycle ----------
 document.addEventListener("visibilitychange", ()=>{ updateStatus(); if(visible()) render(); reschedule(); });
+document.addEventListener("visibilitychange", ()=>{ if(route.section!=="health") return; if(visible()) healthEnter(); else healthClearTimers(); });
 setInterval(()=>{ $("clock").textContent=new Date().toLocaleTimeString(); },1000);
 window.addEventListener("hashchange",onRoute);
 

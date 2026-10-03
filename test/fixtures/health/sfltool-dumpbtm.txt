@@ -1,0 +1,262 @@
+========================
+ Records for UID -2 : FFFFEEEE-DDDD-CCCC-BBBB-AAAAFFFFFFFE
+========================
+
+ ServiceManagement migrated: true
+ LaunchServices registered: false
+
+ Items:
+
+ #1:
+                 UUID: B8BECE53-F679-41A6-84FC-4A98CF18A0C3
+                 Name: DisplayLink Manager
+       Developer Name: DisplayLink Corp
+      Team Identifier: 73YQY62QM3
+                 Type: app (0x2)
+                Flags: [ sandboxed ] (0x40)
+          Disposition: [disabled, allowed, not notified] (0x2)
+           Identifier: 2.com.displaylink.DisplayLinkUserAgent
+                  URL: file:///Applications/DisplayLink%20Manager.app/
+           Generation: 4
+    Bundle Identifier: com.displaylink.DisplayLinkUserAgent
+
+ #2:
+                 UUID: 36E945FB-0B8A-45BD-87E8-EC20D28A28F0
+                 Name: DisplayLink Manager
+       Developer Name: DisplayLink Corp
+      Team Identifier: 73YQY62QM3
+                 Type: legacy agent (0x10008)
+                Flags: [ legacy ] (0x1)
+          Disposition: [enabled, allowed, not notified] (0x3)
+           Identifier: 8.com.displaylink.DisplayLinkUserAgent
+                  URL: file:///Library/LaunchAgents/com.displaylink.loginscreen.plist
+      Executable Path: /Applications/DisplayLink Manager.app
+           Generation: 0
+    Assoc. Bundle IDs: [ com.displaylink.DisplayLinkUserAgent ]
+    Parent Identifier: 2.com.displaylink.DisplayLinkUserAgent
+
+ #3:
+                 UUID: A4F5555A-8A17-4A7D-A42A-F6B0CDDFE9FF
+                 Name: Microsoft AutoUpdate
+       Developer Name: Microsoft AutoUpdate
+                 Type: developer (0x20)
+                Flags: [ curated ] (0x4)
+          Disposition: [disabled, allowed, not notified] (0x2)
+           Identifier: Microsoft AutoUpdate
+                  URL: (null)
+           Generation: 0
+  Embedded Item Identifiers:
+    #1: 16.com.microsoft.autoupdate.helper
+
+ #4:
+                 UUID: 0BC4D78B-79DA-4658-9315-A591ABF3810B
+                 Name: com.microsoft.autoupdate.helper
+       Developer Name: Microsoft AutoUpdate
+      Team Identifier: UBF8T346G9
+                 Type: legacy daemon (0x10010)
+                Flags: [ legacy, curated ] (0x5)
+          Disposition: [enabled, allowed, notified] (0xb)
+           Identifier: 16.com.microsoft.autoupdate.helper
+                  URL: file:///Library/LaunchDaemons/com.microsoft.autoupdate.helper.plist
+      Executable Path: /Library/PrivilegedHelperTools/com.microsoft.autoupdate.helper
+           Generation: 6
+    Assoc. Bundle IDs: [ com.microsoft.autoupdate2 ]
+    Parent Identifier: Microsoft AutoUpdate
+
+ #5:
+                 UUID: 972A0EBD-1B14-42CC-9DB0-B4C9E6FC379C
+                 Name: com.muse.authservice
+       Developer Name: StaffPad Ltd
+      Team Identifier: 6ZE93BN9HZ
+                 Type: legacy daemon (0x10010)
+                Flags: [ legacy ] (0x1)
+          Disposition: [enabled, allowed, notified] (0xb)
+           Identifier: 16.com.muse.authservice
+                  URL: file:///Library/LaunchDaemons/com.muse.authservice.plist
+      Executable Path: /Library/PrivilegedHelperTools/com.muse.authservice
+           Generation: 1
+    Parent Identifier: StaffPad Ltd
+
+========================
+ Records for UID 0 : FFFFEEEE-DDDD-CCCC-BBBB-AAAA00000000
+========================
+
+ ServiceManagement migrated: false
+ LaunchServices registered: false
+
+ Items:
+
+========================
+ Records for UID 501 : 8B30737A-91C2-4940-B952-1DA420EAB80D
+========================
+
+ ServiceManagement migrated: true
+ LaunchServices registered: true
+
+ Items:
+
+ #1:
+                 UUID: 05E795BA-860A-4890-9564-4EB9D8D19007
+                 Name: Dropbox
+       Developer Name: (null)
+      Team Identifier: G7HH3F8CAK
+                 Type: app (0x2)
+                Flags: [  ] (0)
+          Disposition: [enabled, allowed, notified] (0xb)
+           Identifier: 2.com.getdropbox.dropbox
+                  URL: file:///Applications/Dropbox.app/
+           Generation: 1
+    Bundle Identifier: com.getdropbox.dropbox
+
+ #2:
+                 UUID: 16BB3FC3-4FA6-42B0-A1E9-01F5DBDAC9DD
+                 Name: DockDoor
+       Developer Name: Ethan Bills
+      Team Identifier: 2Q775S63Q3
+                 Type: app (0x2)
+                Flags: [  ] (0)
+          Disposition: [enabled, allowed, notified] (0xb)
+           Identifier: 2.com.ethanbills.DockDoor
+                  URL: file:///Users/waldo/.Trash/DockDoor.app/
+           Generation: 9
+    Bundle Identifier: com.ethanbills.DockDoor
+
+ #3:
+                 UUID: 730086CC-2F73-40AE-9543-9F4D74A0042B
+                 Name: Electron
+       Developer Name: (null)
+                 Type: app (0x2)
+                Flags: [  ] (0)
+          Disposition: [enabled, allowed, notified] (0xb)
+           Identifier: 2.Electron
+                  URL: file:///Users/waldo/Temp/TeamsChatNotificationApp/node_modules/electron/dist/Electron.app/
+           Generation: 1
+
+ #4:
+                 UUID: 0CAD8F46-2F72-48BC-B266-6F11C591EEE2
+                 Name: Mouse Glide
+       Developer Name: (null)
+      Team Identifier: ZHJ44A6GQ4
+                 Type: app (0x2)
+                Flags: [ sandboxed ] (0x40)
+          Disposition: [enabled, allowed, notified] (0xb)
+           Identifier: 2.com.tinfine.MouseGlide
+                  URL: file:///Users/waldo/.Trash/Mouse%20Glide.app/
+           Generation: 4
+    Bundle Identifier: com.tinfine.MouseGlide
+
+ #5:
+                 UUID: 667E2DB2-D841-48C5-B9FE-DB7EFCE5D7E8
+                 Name: Warp
+       Developer Name: Denver Technologies, Inc
+      Team Identifier: 2BBY89MBSN
+                 Type: app (0x2)
+                Flags: [  ] (0)
+          Disposition: [enabled, allowed, notified] (0xb)
+           Identifier: 2.dev.warp.Warp-Stable
+                  URL: file:///Applications/Warp.app/
+           Generation: 2
+    Bundle Identifier: dev.warp.Warp-Stable
+
+ #6:
+                 UUID: 0DEDCA58-B263-46AF-B9EF-7B80CB07FFD7
+                 Name: Teams Chat Notifier
+       Developer Name: (null)
+                 Type: app (0x2)
+                Flags: [  ] (0)
+          Disposition: [enabled, allowed, notified] (0xb)
+           Identifier: 2.com.teamschatnotifier.app
+                  URL: file:///Applications/Teams%20Chat%20Notifier.app/
+           Generation: 5
+    Bundle Identifier: com.teamschatnotifier.app
+
+ #7:
+                 UUID: 52F950C5-846E-4F09-8436-34FEFA4A13F4
+                 Name: amelia-gateway
+       Developer Name: (null)
+                 Type: user item (0x1)
+                Flags: [  ] (0)
+          Disposition: [enabled, allowed, not notified] (0x3)
+           Identifier: file:///Users/waldo/.local/bin/amelia-gateway
+                  URL: file:///Users/waldo/.local/bin/amelia-gateway
+           Generation: 23
+
+ #8:
+                 UUID: 414E4458-89FB-4A63-B202-075782B85541
+                 Name: OneDrive Launcher
+       Developer Name: (null)
+      Team Identifier: UBF8T346G9
+                 Type: login item (0x4)
+                Flags: [ sandboxed ] (0x40)
+          Disposition: [enabled, allowed, notified] (0xb)
+           Identifier: 4.com.microsoft.OneDriveLauncher
+                  URL: Contents/Library/LoginItems/OneDrive%20Launcher.app
+           Generation: 1
+    Bundle Identifier: com.microsoft.OneDriveLauncher
+    Parent Identifier: 2.com.microsoft.OneDrive-mac
+
+ #9:
+                 UUID: 275EFFCC-B886-4404-8F51-93E8A7AE3A2D
+                 Name: amelia-gateway
+       Developer Name: (null)
+                 Type: legacy agent (0x10008)
+                Flags: [ legacy ] (0x1)
+          Disposition: [enabled, allowed, notified] (0xb)
+           Identifier: 8.be.ifacto.amelia-gateway
+                  URL: file:///Users/waldo/Library/LaunchAgents/be.ifacto.amelia-gateway.plist
+      Executable Path: /Users/waldo/.local/bin/amelia-gateway
+           Generation: 1
+    Parent Identifier: Unknown Developer
+
+ #10:
+                 UUID: F780CA83-3A00-461D-A31E-3B7662DDBCD6
+                 Name: ChatGPTHelper
+       Developer Name: (null)
+      Team Identifier: 2DC432GLL2
+                 Type: agent (0x8)
+                Flags: [  ] (0)
+          Disposition: [enabled, allowed, notified] (0xb)
+           Identifier: 8.com.openai.chat-helper
+                  URL: Contents/Library/LaunchAgents/com.openai.chat-helper.plist
+      Executable Path: Contents/Resources/ChatGPTHelper
+           Generation: 11
+    Parent Identifier: 2.com.openai.chat
+
+ #11:
+                 UUID: D51D8E81-A41C-429C-868B-3985905C9D75
+                 Name: DisplayLink Manager
+       Developer Name: (null)
+      Team Identifier: 73YQY62QM3
+                 Type: app (0x2)
+                Flags: [ sandboxed ] (0x40)
+          Disposition: [enabled, allowed, not notified] (0x3)
+           Identifier: 2.com.displaylink.DisplayLinkUserAgent
+                  URL: file:///Applications/DisplayLink%20Manager.app/
+           Generation: 8
+    Bundle Identifier: com.displaylink.DisplayLinkUserAgent
+
+ #12:
+                 UUID: 7C82FEF2-1839-4A17-9EA5-129D219E81D5
+                 Name: Rectangle
+       Developer Name: Ryan Hanson
+      Team Identifier: XSYZ3E4B7D
+                 Type: app (0x2)
+                Flags: [  ] (0)
+          Disposition: [enabled, allowed, notified] (0xb)
+           Identifier: 2.com.knollsoft.Rectangle
+                  URL: file:///Applications/Rectangle.app/
+           Generation: 1
+    Bundle Identifier: com.knollsoft.Rectangle
+
+ #13:
+                 UUID: F31BA5BB-CB60-463C-BD86-3D444F1D26AD
+                 Name: Alarm
+       Developer Name: Parallels International GmbH
+      Team Identifier: 4C6364ACXT
+                 Type: app (0x2)
+                Flags: [  ] (0)
+          Disposition: [disabled, allowed, notified] (0xa)
+           Identifier: 2.com.parallels.toolbox.Alarm
+                  URL: file:///Applications/Parallels%20Toolbox.app/Contents/Applications/Alarm.app/
+           Generation: 1
+    Bundle Identifier: com.parallels.toolbox.Alarm

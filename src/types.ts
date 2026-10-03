@@ -284,3 +284,79 @@ export interface ProcessTree {
   /** Every node, in no particular order. */
   all: ProcessNode[];
 }
+
+// ── Health ──
+export type HealthVerdict = 'healthy' | 'cluttered' | 'degraded' | 'sick';
+export type HealthSeverity = 'info' | 'advice' | 'warn' | 'risk';
+export type HealthCategory =
+  | 'vitals' | 'stability' | 'startup' | 'processes' | 'tooling' | 'updates' | 'backup' | 'clutter';
+export type SafetyClass =
+  | 'regenerates'   // caches/build output: delete freely, app rebuilds it
+  | 'orphan'        // owner app no longer installed / target missing
+  | 'ask'           // valuable to some users (VM disks, models, downloads)
+  | 'keep'          // in use / owner unknown; listed for transparency only
+  | 'manual';       // needs elevated rights, GUI or a restart — print steps, never act
+
+export interface HealthEvidence {
+  command: string;          // exactly what was run, copy-pasteable
+  excerpt: string;          // trimmed output lines that justify the finding (≤ 12 lines)
+}
+
+/** One path a finding is about. These are the rows of the Reclaimable table. */
+export interface ClutterItem {
+  path: string;                  // absolute
+  bytes: number;                 // ON-DISK bytes (du -k × 1024, or lstat blocks × 512)
+  lastModified: number | null;   // ms epoch
+  safety: SafetyClass;
+  note?: string;                 // "iPhone 17 Pro", "3 uncommitted changes", "OrbStack is not running"
+}
+
+export interface HealthFinding {
+  id: string;               // unique within a report, kebab-case; `<checkId>` or `<checkId>:<slug>`
+  checkId: string;
+  category: HealthCategory;
+  severity: HealthSeverity;
+  title: string;            // one line, human
+  detail: string;           // 1–3 sentences; say what it means, not just what it is
+  evidence: HealthEvidence[];
+  items?: ClutterItem[];
+  reclaimableBytes?: number;     // sum of items with safety regenerates | orphan | ask
+  safety?: SafetyClass;          // default class of the finding
+  regenNote?: string;            // what happens after deletion, one sentence
+  actionId?: string;             // Phase 2: id of the clean-up action that fixes it
+  manualSteps?: string[];        // exact commands / Settings path
+  asOf?: number;                 // set by the engine when the finding was served from cache
+}
+
+export interface HealthVitals {           // tiles; every field nullable
+  memFreePct: number | null; swapUsedBytes: number | null; pressure: string | null;
+  loadAvg1: number | null; uptimeSec: number | null; processCount: number | null;
+  thermalWarning: boolean | null; batteryCycles: number | null; batteryHealthPct: number | null;
+  diskFreeBytes: number | null; diskTotalBytes: number | null; localSnapshots: number | null;
+  crashes7d: number | null;
+}
+
+export interface HealthReport {
+  at: number;
+  scope: 'quick' | 'full';
+  durationMs: number;
+  verdict: HealthVerdict;
+  verdictReason: string;
+  vitals: HealthVitals;
+  findings: HealthFinding[];                                    // sorted, see sortFindings
+  reclaimable: { total: number; byClass: Record<SafetyClass, number> };
+  skipped: { id: string; reason: string }[];                    // timed out / failed / warming
+  fullScan: { at: number | null; stale: boolean };              // stale = older than 24 h
+  refreshing: string[];                                         // check ids refreshing in background
+  /** Checks that only run when the user asks (they raise a macOS authorization dialog). */
+  onDemand: { id: string; category: HealthCategory; label: string; note: string; at: number | null }[];
+}
+
+/** The one in-process full-scan job behind POST /api/health/scan. */
+export interface HealthScanJob {
+  id: string;
+  state: 'running' | 'done' | 'failed';
+  progress: { done: number; total: number; current: string };
+  report?: HealthReport;
+  error?: string;
+}

@@ -11,6 +11,10 @@ import { runUi } from './render/ui.js';
 import { startServer } from './server/server.js';
 import { startHistoryStore } from './history/collector.js';
 import { spawn } from 'node:child_process';
+import { writeFile } from 'node:fs/promises';
+import { resolve as resolvePath } from 'node:path';
+import { collectHealth } from './health/engine.js';
+import { buildHealthMarkdown, buildHealthReport } from './report/health.js';
 import { fmtPct, homePath } from './render/format.js';
 import { color } from './util/color.js';
 import type { ProcessNode, ProcessTree } from './types.js';
@@ -113,6 +117,49 @@ export function buildProgram(): Command {
       const node = findNode(tree, pid);
       if (!node) return fail(`No process with PID ${pid} in this snapshot.`);
       console.log(generateReport(node, await enrich(node)));
+    });
+
+  program
+    .command('health')
+    .description('Mac health check: verdict, vitals and findings (read-only, no sudo)')
+    .option('--full', 'also survey disk clutter (bounded du, up to ~90 s)')
+    .option('--json', 'print the HealthReport as JSON')
+    .option('--md <file>', 'write the findings as markdown to <file> and print its path')
+    .option('--no-cache', 'ignore cached results of the slow checks (re-run them now)')
+    .option('--login-items', 'also check login items (macOS asks for Touch ID or your password)')
+    .action(async (opts) => {
+      // A one-shot process cannot refresh in the background, so cached checks are awaited.
+      const full = Boolean(opts.full);
+      const progress = full && process.stderr.isTTY
+        ? (p: { done: number; total: number; current: string }) =>
+            process.stderr.write(`\r\x1b[K${p.done}/${p.total} · ${p.current}`)
+        : undefined;
+      const report = await collectHealth({
+        mode: full ? 'full' : 'quick',
+        awaitCached: true,
+        noCache: opts.cache === false,
+        ...(opts.loginItems ? { include: ['login-items'] } : {}),
+        ...(progress ? { onProgress: progress } : {}),
+      });
+      if (progress) process.stderr.write('\r\x1b[K');
+
+      let mdPath: string | null = null;
+      if (opts.md) {
+        mdPath = resolvePath(String(opts.md));
+        try {
+          await writeFile(mdPath, buildHealthMarkdown(report), 'utf8');
+        } catch (err) {
+          return fail(`Could not write ${mdPath}: ${err instanceof Error ? err.message : err}`);
+        }
+      }
+      if (opts.json) {
+        console.log(JSON.stringify(report, null, 2));
+        if (mdPath) console.error(mdPath);
+      } else if (mdPath) {
+        console.log(mdPath);
+      } else {
+        console.log(buildHealthReport(report));
+      }
     });
 
   program

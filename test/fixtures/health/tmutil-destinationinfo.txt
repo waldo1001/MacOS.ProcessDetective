@@ -1,0 +1,5 @@
+====================================================
+Name          : Time Machine
+Kind          : Network
+URL           : smb://user@nas._smb._tcp.local./Time%20Machine
+ID            : 00000000-0000-0000-0000-000000000000

@@ -1,0 +1,2 @@
+Would remove (empty directory): /opt/homebrew/lib/gio/modules
+Would remove (empty directory): /opt/homebrew/lib/gio

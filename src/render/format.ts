@@ -64,3 +64,23 @@ export function friendlyNodeName(node: ProcessNode): string {
 export function describe(proc: RawProcess): string {
   return `${proc.name} (PID ${proc.pid})`;
 }
+
+/**
+ * Human byte size — 1024-based, labelled B/KB/MB/GB/TB, one decimal below 10
+ * (like the page's `fmtBytes`): 10_630_000_000 bytes is "9.9 GB", never "10 GB".
+ */
+export function fmtBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 1) return '0 B';
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let v = bytes;
+  let i = -1;
+  do {
+    v /= 1024;
+    i++;
+  } while (v >= 1024 && i < units.length - 1);
+  // 1023.7 KB would print as "1024 KB"; promote it instead of lying about the unit.
+  if (v >= 1023.5 && i < units.length - 1) return `1.0 ${units[i + 1]}`;
+  const shown = v < 10 ? v.toFixed(1) : String(Math.round(v));
+  return `${shown === '10.0' ? '10' : shown} ${units[i]}`;
+}

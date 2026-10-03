@@ -15,6 +15,7 @@ import { inspectPayload, processesPayload } from './payload.js';
 import { AdviceError, getAdvice } from './advice.js';
 import type { HistoryStore } from '../history/collector.js';
 import { RANGES } from '../history/store.js';
+import { handleHealthRoute } from './health-routes.js';
 
 /** The single-page app, loaded once at startup (copied next to this module by the build). */
 const PAGE = readFileSync(fileURLToPath(new URL('./page.html', import.meta.url)), 'utf8');
@@ -218,6 +219,8 @@ export function startServer(
           return json(res, 200, { error: message });
         }
       }
+
+      if (await handleHealthRoute(req, res, url)) return;
 
       send(res, 404, 'text/plain; charset=utf-8', 'Not found');
     } catch (err) {

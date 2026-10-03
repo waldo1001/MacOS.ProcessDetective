@@ -1,0 +1,24 @@
+Power:
+
+    Battery Information:
+
+      Model Information:
+          Serial Number: F8Y000000000000000
+          Device Name: bq40z651
+          Pack Lot Code: 0
+          PCB Lot Code: 0
+          Firmware Version: 0b00
+          Hardware Revision: 100
+          Cell Revision: 271d
+      Charge Information:
+          The battery’s charge is below the warning level: No
+          Fully Charged: No
+          Charging: No
+          State of Charge (%): 69
+      Health Information:
+          Cycle Count: 79
+          Condition: Normal
+          Maximum Capacity: 95%
+
+    System Power Settings:
+

@@ -1,0 +1,13 @@
+Backup session status:
+{
+    BackupPhase = FindingChanges;
+    ChangedItemCount = 141524;
+    ClientID = "com.apple.backupd";
+    DateOfStateChange = "2026-10-03 10:27:03 +0000";
+    DestinationID = "00000000-0000-0000-0000-000000000000";
+    DestinationMountPoint = "/Volumes/Backups of waldo\U2019s Mac";
+    FractionDone = 0;
+    FractionOfProgressBar = "0.1";
+    Running = 1;
+    attemptOptions = 1;
+}

@@ -1,0 +1,9 @@
+﻿{
+  "acceptTeeEula": true,
+  "agentId": 18,
+  "agentName": "waldos-Mac-2",
+  "poolId": 10,
+  "poolName": "IFX-UBUNTU-BUILD",
+  "serverUrl": "https://dev.azure.com/example/",
+  "workFolder": "_work"
+}

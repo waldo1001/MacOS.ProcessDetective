@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "process-detective",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["dist/index.js", "serve", "--no-open", "--no-history", "--port", "7941"],
+      "port": 7941,
+      "url": "http://127.0.0.1:7941"
+    }
+  ]
+}

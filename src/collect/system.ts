@@ -29,7 +29,13 @@ export interface SystemStats {
     readBytesPerSec: number; writeBytesPerSec: number;
     readTotalBytes: number; writeTotalBytes: number;
   };
-  storage: { volumes: { name: string; mount: string; totalBytes: number; usedBytes: number; usedPct: number }[] };
+  storage: {
+    volumes: {
+      name: string; mount: string; totalBytes: number; usedBytes: number; usedPct: number;
+      /** The `Available` column of `df -k` (the real free space; `total − used` over-reports it on APFS). */
+      availBytes: number;
+    }[];
+  };
   /** The detective's own server footprint — watch this for leaks over long uptimes. */
   server: { rssBytes: number; uptimeSeconds: number };
   power: {
@@ -106,7 +112,7 @@ function parseSwap(out: string): { totalBytes: number; usedBytes: number } {
   };
 }
 
-function parseDf(out: string): SystemStats['storage']['volumes'] {
+export function parseDf(out: string): SystemStats['storage']['volumes'] {
   const vols: SystemStats['storage']['volumes'] = [];
   const seen = new Set<string>();
   for (const line of out.split('\n').slice(1)) {
@@ -114,6 +120,7 @@ function parseDf(out: string): SystemStats['storage']['volumes'] {
     if (c.length < 9 || !c[0]!.startsWith('/dev/')) continue;
     const totalBytes = num(c[1]) * 1024;
     const usedBytes = num(c[2]) * 1024;
+    const availBytes = num(c[3]) * 1024;
     const mount = c.slice(8).join(' ');
     // APFS volumes share a container; collapse to the most useful mounts only.
     if (!(mount === '/' || mount.startsWith('/Volumes/'))) continue;
@@ -125,6 +132,7 @@ function parseDf(out: string): SystemStats['storage']['volumes'] {
       totalBytes,
       usedBytes,
       usedPct: totalBytes ? (usedBytes / totalBytes) * 100 : 0,
+      availBytes,
     });
   }
   return vols;
