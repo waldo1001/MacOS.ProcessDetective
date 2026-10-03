@@ -1,7 +1,20 @@
 # Spec — Mac health check + gated clean-up actions
 
-Status: **DRAFT, Phase 1 ready to build.** Phase 2 (actions) is gated: build it only after
-Phase 1 is verified in the UI on a real machine. Hand this file to `/spec-and-build`.
+Status: **DRAFT, Phase 1 ready to build.** Hand this file to `/spec-and-build`.
+
+## Build order (mandatory — read before anything else)
+
+1. **Build Phase 1 only.** Stop at the end of Phase 1's acceptance criteria and report. Do
+   **not** start Phase 2 in the same run, even if asked to "do the whole spec" — Phase 2
+   changes the app's read-only contract and is reviewed separately.
+2. **Waldo reviews Phase 1 in the UI on this Mac** (`npm run deploy`, open the Health section,
+   run a full scan, read the findings against the machine he knows). Fixes from that review
+   land in Phase 1 before anything else happens.
+3. **Only then start Phase 2**, as a new `/spec-and-build` run with the instruction "Phase 2 of
+   `docs/health-check-and-cleanup-spec.md`". The Phase 2 agent must confirm Phase 1 is merged
+   and its tests are green before touching an action.
+
+If you are the build agent and the request does not say which phase, it is Phase 1.
 
 ## Origin
 
@@ -396,7 +409,8 @@ inject `ctx.run`.
 
 # Phase 2 — Clean-up actions (gated, opt-in, audited)
 
-Build only after Phase 1 is verified on a real Mac in the UI. Same conventions.
+**Do not build in the same run as Phase 1.** Build only after Waldo has reviewed Phase 1 in
+the UI on this Mac and its fixes are in (see "Build order" at the top). Same conventions.
 
 ## Safety contract (this is the feature)
 
