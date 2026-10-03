@@ -1,0 +1,20 @@
+COMMAND     PID   USER      FD   TYPE DEVICE     SIZE/OFF      NODE NAME
+Code_H      75941 testuser  3r    REG   1,17       12345          111 /usr/lib/libSystem.B.dylib
+Code_H      75941 testuser  4r    REG   1,17       12345          112 /System/Library/Frameworks/Foundation.framework/Foundation
+Code_H      75941 testuser  5r    REG   1,17       12345          113 /usr/share/zoneinfo/UTC
+Code_H      75941 testuser  6u    REG   1,17       4096           114 /Users/testuser/Library/Application Support/Code/User/globalStorage/github.copilot-chat/session-store.db
+Code_H      75941 testuser  7u    REG   1,17       32768          115 /Users/testuser/Library/Application Support/Code/User/globalStorage/github.copilot-chat/session-store.db-wal
+Code_H      75941 testuser  8u    REG   1,17       32768          116 /Users/testuser/Library/Application Support/Code/User/globalStorage/github.copilot-chat/session-store.db-shm
+Code_H      75941 testuser  9u    REG   1,17       23229802       117 /Users/testuser/.claude/projects/-Users-testuser-SourceCode-Demo/aaa.jsonl
+Code_H      75941 testuser  10u   REG   1,17       23229802       118 /Users/testuser/.claude/projects/-Users-testuser-SourceCode-Demo/bbb.jsonl
+Code_H      75941 testuser  11u   REG   1,17       23229802       119 /Users/testuser/.claude/projects/-Users-testuser-SourceCode-Demo/ccc.jsonl
+Code_H      75941 testuser  12u   REG   1,17       23229802       120 /Users/testuser/.claude/projects/-Users-testuser-SourceCode-Demo/ddd.jsonl
+Code_H      75941 testuser  13u   REG   1,17       23229802       121 /Users/testuser/.claude/projects/-Users-testuser-SourceCode-Demo/eee.jsonl
+Code_H      75941 testuser  14u   REG   1,17       23229802       122 /Users/testuser/.claude/projects/-Users-testuser-SourceCode-Demo/subagents/fff.jsonl
+Code_H      75941 testuser  15u   REG   1,17       23229802       123 /Users/testuser/.claude/projects/-Users-testuser-SourceCode-Demo/subagents/ggg.jsonl
+Code_H      75941 testuser  16u   REG   1,17       23229802       124 /Users/testuser/.claude/projects/-Users-testuser-SourceCode-Demo/subagents/workflows/wf_abc/hhh.jsonl
+Code_H      75941 testuser  17r   REG   1,17       81920          125 /Users/testuser/.vscode/extensions/anthropic.claude-code-2.1.218-darwin-arm64/resources/audio-capture/arm64-darwin/audio-capture.node
+Code_H      75941 testuser  18r   REG   1,17       102400         126 /Applications/Visual Studio Code.app/Contents/Resources/app/extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/darwin-arm64/runtime.node
+Code_H      75941 testuser  19u   IPv4  0x1a2b3c4d5e6f7a8b 0t0    TCP  127.0.0.1:52341->127.0.0.1:5432 (ESTABLISHED)
+Code_H      75941 testuser  20u   IPv4  0x1a2b3c4d5e6f7a8c 0t0    TCP  *:5173 (LISTEN)
+Code_H      75941 testuser  cwd   DIR   1,17       160            127 /Users/testuser/SourceCode/Demo

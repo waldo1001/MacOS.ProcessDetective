@@ -1,0 +1,31 @@
+Analysis of sampling node (pid 88888) every 1 millisecond
+Process:         node [88888]
+Path:            /usr/local/bin/node
+Load Address:    0x100000000
+Identifier:      node
+Version:         ???
+Code Type:       ARM64E
+Platform:        macOS
+Parent Process:  zsh [67384]
+
+Date/Time:       2026-06-26 17:05:00.000 +0200
+OS Version:      macOS 26.5.0 (25F80)
+Report Version:  7
+Analysis Tool:   /usr/bin/sample
+
+Call graph:
+    950 Thread_1234567   DispatchQueue_1: com.apple.main-thread  (serial)
+      950 start  (in dyld) + 100  [0x100000001]
+        950 main  (in node) + 200  [0x100001000]
+          950 node::Start  (in node) + 300  [0x100002000]
+            950 uv_run  (in node) + 400  [0x100003000]
+              950 v8::internal::Compiler::CompileForDebugging  (in node) + 500  [0x100004000]
+                950 v8::internal::BytecodeGenerator::GenerateBytecode  (in node) + 600  [0x100005000]
+
+Total number in stack (recursive counted multiple, when >=5):
+
+Sort by top of stack, same collapsed (when >= 5):
+        v8::internal::BytecodeGenerator::GenerateBytecode  (in node)        950
+
+Binary Images:
+       0x100000000 -        0x100200000  node (18.0.0) /usr/local/bin/node

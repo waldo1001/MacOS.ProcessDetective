@@ -1,0 +1,8 @@
+COMMAND     PID   USER      FD   TYPE DEVICE     SIZE/OFF      NODE NAME
+Code_H      75941 testuser  10u   REG   1,17       0t1000         111 /Users/testuser/.claude/projects/-Users-testuser-SourceCode-Demo/aaa.jsonl
+Code_H      75941 testuser  11u   REG   1,17       0t500          112 /Users/testuser/.claude/projects/-Users-testuser-SourceCode-Demo/bbb.jsonl
+Code_H      75941 testuser  12u   REG   1,17       0t300          113 /Users/testuser/.claude/projects/-Users-testuser-SourceCode-Demo/ccc.jsonl
+Code_H      75941 testuser  13u   REG   1,17       0t700          114 /Users/testuser/.claude/projects/-Users-testuser-SourceCode-Demo/ddd.jsonl
+Code_H      75941 testuser  14u   REG   1,17       0t50           115 /Users/testuser/.claude/projects/-Users-testuser-SourceCode-Demo/eee.jsonl
+Code_H      75941 testuser  15u   REG   1,17       0t20           116 /Users/testuser/.claude/projects/-Users-testuser-SourceCode-Demo/fff.jsonl
+Code_H      75941 testuser  20u   IPv4  0x1a2b3c   0t0            TCP  127.0.0.1:52341->127.0.0.1:5432 (ESTABLISHED)

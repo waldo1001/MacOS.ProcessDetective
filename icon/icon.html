@@ -1,0 +1,62 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  html,body{margin:0;padding:0;background:transparent}
+  svg{display:block}
+</style></head>
+<body>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16212f"/>
+      <stop offset="0.55" stop-color="#0d141d"/>
+      <stop offset="1" stop-color="#080c12"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5ad7ef"/>
+      <stop offset="1" stop-color="#2bb6d6"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.45" cy="0.42" r="0.5">
+      <stop offset="0" stop-color="#36c2e0" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#36c2e0" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="9" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="lensClip"><circle cx="430" cy="412" r="150"/></clipPath>
+  </defs>
+
+  <!-- rounded-square tile (transparent corners) -->
+  <rect x="92" y="92" width="840" height="840" rx="190" ry="190" fill="url(#tile)"/>
+  <rect x="92" y="92" width="840" height="840" rx="190" ry="190" fill="none" stroke="#ffffff" stroke-opacity="0.06" stroke-width="2"/>
+  <ellipse cx="512" cy="300" rx="360" ry="150" fill="#ffffff" opacity="0.03"/>
+
+  <!-- ambient glow behind the glyph -->
+  <circle cx="455" cy="430" r="320" fill="url(#glow)"/>
+
+  <!-- faint grid ticks (telemetry texture) -->
+  <g stroke="#36c2e0" stroke-opacity="0.10" stroke-width="3">
+    <line x1="190" y1="690" x2="834" y2="690"/>
+    <line x1="190" y1="600" x2="834" y2="600"/>
+  </g>
+
+  <!-- magnifier handle -->
+  <line x1="556" y1="540" x2="700" y2="684" stroke="#1a2a36" stroke-width="78" stroke-linecap="round"/>
+  <line x1="556" y1="540" x2="700" y2="684" stroke="url(#cyan)" stroke-width="48" stroke-linecap="round"/>
+
+  <!-- lens ring -->
+  <circle cx="430" cy="412" r="150" fill="#0b1118"/>
+  <g filter="url(#soft)">
+    <circle cx="430" cy="412" r="150" fill="none" stroke="url(#cyan)" stroke-width="30"/>
+  </g>
+
+  <!-- CPU waveform inside the lens -->
+  <g clip-path="url(#lensClip)">
+    <path d="M300 470 L360 470 L392 412 L430 470 L470 345 L510 440 L560 440"
+          fill="none" stroke="url(#cyan)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M300 470 L360 470 L392 412 L430 470 L470 345 L510 440 L560 440 L560 540 L300 540 Z"
+          fill="#36c2e0" fill-opacity="0.16"/>
+    <circle cx="470" cy="345" r="13" fill="#5ad7ef"/>
+  </g>
+</svg>
+</body></html>

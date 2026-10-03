@@ -1,0 +1,23 @@
+Timestamp               Ty Process[PID:TID]
+2026-07-01 10:35:34.063 Df WindowServer[411:c89a3] [com.apple.Multitouch:Plugin] [TP] Dispatching digitizer event with 2 children, _eventMask=0x0 _childEventMask=0x2 Cancel=0 Touching=1 inRange=1
+2026-07-01 10:35:34.491 Df WindowServer[411:c89a3] [com.apple.Multitouch:Plugin] [TP] Dispatching digitizer event with 2 children, _eventMask=0x2 _childEventMask=0x2 Cancel=0 Touching=0 inRange=1
+2026-07-01 10:35:35.408 I  WindowServer[411:ca05f] [com.apple.SkyLight:cursor] <private> Display 0x00000006 cursor hidden -> NO
+2026-07-01 10:35:35.410 I  WindowServer[411:15c7] [com.apple.SkyLight:packages] 0[outside of RPC]: order window: 5 op: 1 relative: 0
+2026-07-01 10:35:35.410 I  WindowServer[411:15c7] [com.apple.SkyLight:cursor] <private> Ordered cursor window In
+2026-07-01 10:35:35.421 I  WindowServer[411:15c7] (IOMobileFramebuffer) kern_SwapSetLFCTimestamps: LFC: NT=0 EM=0 lfc_en=0
+2026-07-01 10:35:35.850 Df WindowServer[411:ca0b6] [com.apple.SkyLight:default] [Event] Process button state old:0 new:1 SenderID:0x10001ebf9 t:1165486032700
+2026-07-01 10:35:35.850 Df WindowServer[411:ca0b6] [com.apple.SkyLight:default] [Event] GlobalButtons:1 (Last SenderID:0x10001ebf9)
+2026-07-01 10:35:35.850 Df WindowServer[411:ca0b6] [com.apple.SkyLight:default] [Event] context.globalButtons(0) != translator->globalButtons(1) t:1165486032700
+2026-07-01 10:35:35.857 I  WindowServer[411:15c7] [com.apple.SkyLight:packages] cfbbb[DoDeferredOrdering]: order window: 3fe op: 1 relative: 0
+2026-07-01 10:35:35.940 Df WindowServer[411:ca05f] [com.apple.SkyLight:default] [Event] Process button state old:1 new:0 SenderID:0x10001ebf9 t:1165488194411
+2026-07-01 10:35:35.940 Df WindowServer[411:ca05f] [com.apple.SkyLight:default] [Event] GlobalButtons:0 (Last SenderID:0x10001ebf9)
+2026-07-01 10:35:35.940 Df WindowServer[411:ca05f] [com.apple.SkyLight:default] [Event] context.globalButtons(1) != translator->globalButtons(0) t:1165488194411
+2026-07-01 10:35:35.950 I  WindowServer[411:15c7] [com.apple.SkyLight:packages] 86d03[OrderWindowGroup]: order window: 4c op: 0 relative: 0
+2026-07-01 10:35:36.001 E  WindowServer[411:ca0b6] [com.apple.SkyLight:error] Failed to acquire lock for display 0x00000001, retrying (attempt 1)
+2026-07-01 10:35:36.002 F  WindowServer[411:ca0b6] [com.apple.SkyLight:error] Fatal fault: display lock timeout exceeded for display 0x00000002
+2026-07-01 10:35:43.941 I  WindowServer[411:c94f8] [com.apple.iohid:connection] 7D1AAB4C-4DAF-4056-A929-ECDBABE1F206: HID activity: 1 -> 0 (service:0x0 event:0)
+2026-07-01 10:35:43.941 I  WindowServer[411:c94f8] [com.apple.iohid:connection] 7D1AAB4C-4DAF-4056-A929-ECDBABE1F206: iohideventsystem_client_dispatch_properties_changed:0x10004003
+2026-07-01 10:35:47.086 Df WindowServer[411:15c7] [com.apple.BackBoard:EventDelivery] destinations for Keyboard event: (<keyboardFocus; MSTeams.6738; token: viewbridge-key-window>)
+2026-07-01 10:35:48.697 Df WindowServer[411:ca14f] [com.apple.SkyLight:default] [Event] Process button state old:0 new:1 SenderID:0x10001ebf9 t:1165794372795
+2026-07-01 10:35:48.697 Df WindowServer[411:ca14f] [com.apple.SkyLight:default] [Event] GlobalButtons:1 (Last SenderID:0x10001ebf9)
+2026-07-01 10:35:48.697 Df WindowServer[411:ca14f] [com.apple.SkyLight:default] [Event] context.globalButtons(0) != translator->globalButtons(1) t:1165794372795

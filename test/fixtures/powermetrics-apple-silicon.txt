@@ -1,0 +1,22 @@
+*** Sampled system activity (Fri Jun 26 21:21:50 2026 +0200) (1018.65ms elapsed) ***
+
+*** Running tasks ***
+
+Name                               ID     CPU ms/s  User%  Deadlines (<2 ms, 2-5 ms)  Wakeups (Intr, Pkg idle)
+WindowServer                       415    190.54    55.41  76.42   0.00               573.13  105.81            
+com.apple.WebKit.GPU               5648   266.75    49.31  0.00    0.00               30.37   5.88              
+Claude Helper                      7619   80.37     62.02  0.00    0.00               259.62  8.82              
+Claude Helper (Renderer)           7702   67.40     86.94  6.86    0.98               150.88  14.70             
+com.apple.WebKit.WebContent        61985  95.27     90.01  0.00    0.00               46.05   7.84              
+osascript                          85358  54.54     19.39  6642.43 0.00               6642.43 1271.66           
+DEAD_TASKS                         -1     46.35     59.25  233.64  1.96               235.61  0.00              
+Claude Helper (Renderer)           15852  24.80     75.62  1.96    0.00               98.95   5.88              
+kernel_task                        0      249.14    0.00   513.37  0.00               4557.61 434.99            
+Safari                             5599   18.16     64.11  0.00    0.00               131.28  43.11             
+claude                             60643  10.97     87.04  0.00    0.00               22.53   0.00              
+com.apple.WebKit.Networking        5646   7.53      75.86  0.00    0.00               10.78   0.00              
+ALL_TASKS                          -2     1410.00   49.53  8252.08 37.30              14650.73 2103.76           
+
+**** GPU usage ****
+GPU HW active residency:  52.98% (338 MHz:  53% 486 MHz:   0% 636 MHz:   0% 796 MHz:   0% 888 MHz:   0% 988 MHz:   0% 1084 MHz:   0% 1182 MHz:   0% 1278 MHz:   0% 1374 MHz:   0% 1470 MHz:   0% 1578 MHz:   0% 1620 MHz:   0%)
+GPU Power: 322 mW

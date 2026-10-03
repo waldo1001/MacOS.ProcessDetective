@@ -1,0 +1,39 @@
+{
+  "name": "process-detective",
+  "version": "0.1.0",
+  "description": "macOS CPU/process detective — find out why that node process is eating your fans",
+  "type": "module",
+  "bin": {
+    "process-detective": "dist/index.js",
+    "pdetective": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && cp src/server/page.html dist/server/page.html",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "app": "bash scripts/build-app.sh",
+    "deploy": "bash scripts/install-app.sh",
+    "deploy:remote": "bash scripts/deploy-remote.sh",
+    "icon": "bash scripts/make-icon.sh",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "release": "bash scripts/notarize.sh"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.106.0",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}

@@ -1,0 +1,34 @@
+Analysis of sampling zsh (pid 99999) every 1 millisecond
+Process:         zsh [99999]
+Path:            /bin/zsh
+Load Address:    0x1000c4000
+Identifier:      zsh
+Version:         118
+Code Type:       ARM64E
+Platform:        macOS
+Parent Process:  claude [70904]
+
+Date/Time:       2026-06-26 17:01:50.581 +0200
+OS Version:      macOS 26.5.0 (25F80)
+Report Version:  7
+Analysis Tool:   /usr/bin/sample
+
+Call graph:
+    885 Thread_6980752   DispatchQueue_1: com.apple.main-thread  (serial)
+      885 start  (in dyld) + 6992  [0x182dc3e00]
+        885 zsh_main  (in zsh) + 1272  [0x1000f4ab0]
+          885 init_misc  (in zsh) + 152  [0x1000f3ebc]
+            885 execstring  (in zsh) + 132  [0x1000d6db4]
+              885 execode  (in zsh) + 188  [0x1000d6e94]
+                885 execlist  (in zsh) + 860  [0x1000d721c]
+                  885 waitjobs  (in zsh) + 72  [0x1000f81a4]
+                    885 signal_suspend  (in zsh) + 76  [0x100124ca8]
+                      885 __sigsuspend  (in libsystem_kernel.dylib) + 8  [0x18314bbbc]
+
+Total number in stack (recursive counted multiple, when >=5):
+
+Sort by top of stack, same collapsed (when >= 5):
+        __sigsuspend  (in libsystem_kernel.dylib)        885
+
+Binary Images:
+       0x1000c4000 -        0x100148db7  zsh (118) /bin/zsh

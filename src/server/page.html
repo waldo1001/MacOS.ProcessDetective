@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Process Detective</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:#0b0f14; --surf:#121922; --surf2:#18222e; --bd:#1f2a36; --tx:#d7e2ec; --mut:#6f8597;
+    --acc:#36c2e0; --calm:#2fd6a6; --warn:#f2b53c; --crit:#ff5d5d; --navbg:#0f2a33;
+    --sans:'Archivo',-apple-system,system-ui,sans-serif; --mono:'Spline Sans Mono',ui-monospace,Menlo,monospace;
+  }
+  [data-theme=light] {
+    --bg:#f1f4f7; --surf:#fff; --surf2:#e9eef3; --bd:#d6dee6; --tx:#16212b; --mut:#5d7081;
+    --acc:#1487a8; --calm:#178a6b; --warn:#b07916; --crit:#d23b39; --navbg:#e4f1f5;
+  }
+  * { box-sizing:border-box; }
+  html,body { height:100%; margin:0; }
+  body { background:var(--bg); color:var(--tx); font:14px/1.5 var(--sans); display:flex; flex-direction:column; overflow:hidden; -webkit-font-smoothing:antialiased; }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  ::-webkit-scrollbar { width:10px; height:10px; } ::-webkit-scrollbar-thumb { background:var(--surf2); border-radius:6px; border:2px solid transparent; background-clip:padding-box; }
+  button { font-family:var(--sans); cursor:pointer; }
+
+  /* header */
+  header { height:48px; flex:0 0 48px; display:flex; align-items:center; gap:12px; padding:0 14px; background:var(--surf); border-bottom:1px solid var(--bd); }
+  .icob { width:30px; height:30px; display:grid; place-items:center; border:1px solid var(--bd); border-radius:8px; background:var(--surf2); color:var(--mut); }
+  .icob:hover { color:var(--tx); }
+  .mark { display:flex; align-items:center; gap:8px; font-weight:700; font-size:14px; }
+  .mark .dot { width:9px; height:9px; border-radius:50%; background:var(--acc); box-shadow:0 0 8px var(--acc); }
+  .chipbadge { font:600 11px var(--mono); color:var(--mut); background:var(--surf2); border:1px solid var(--bd); padding:3px 9px; border-radius:6px; }
+  .hspace { flex:1; }
+  .hpill { display:flex; align-items:center; gap:6px; font:600 11px var(--mono); padding:5px 10px; border-radius:7px; border:1px solid var(--bd); background:var(--surf2); color:var(--mut); }
+  .hpill.btn:hover { border-color:var(--acc); color:var(--tx); }
+  .range-sel { display:flex; align-items:center; gap:2px; font:600 11px var(--mono); border:1px solid var(--bd); border-radius:7px; background:var(--surf2); overflow:hidden; }
+  .range-sel button { background:none; border:none; color:var(--mut); font:600 11px var(--mono); padding:5px 8px; cursor:pointer; }
+  .range-sel button:hover { color:var(--tx); }
+  .range-sel button.on { background:var(--navbg); color:var(--acc); }
+  .rec .rdot { width:8px; height:8px; border-radius:50%; }
+  .rec.on { color:var(--crit); border-color:#3a2330; } .rec.on .rdot { background:var(--crit); animation:pulse 1.6s infinite; }
+  .rec.paused { color:var(--warn); } .rec.paused .rdot { background:var(--warn); }
+  .rec.off { color:var(--mut); } .rec.off .rdot { background:var(--mut); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.2} }
+  .clock { font:600 11px var(--mono); color:var(--mut); min-width:64px; text-align:center; }
+
+  /* shell */
+  .shell { flex:1; display:flex; min-height:0; }
+  nav { width:186px; flex:0 0 186px; background:var(--surf); border-right:1px solid var(--bd); display:flex; flex-direction:column; transition:width .15s, flex-basis .15s; }
+  nav.col { width:58px; flex-basis:58px; }
+  .nitem { display:flex; align-items:center; gap:11px; padding:9px 14px; margin:1px 8px; border-radius:8px; color:var(--mut); font:600 12.5px var(--sans); cursor:pointer; white-space:nowrap; }
+  .nitem:hover { background:var(--surf2); color:var(--tx); }
+  .nitem.active { color:var(--acc); background:var(--navbg); }
+  .nitem .ico { flex:0 0 16px; display:grid; place-items:center; }
+  .nitem .kh { margin-left:auto; font:600 10px var(--mono); color:var(--mut); opacity:.7; }
+  nav.col .nlabel, nav.col .kh { display:none; }
+  .ntop { padding:8px 0; flex:1; overflow-y:auto; }
+  .recbanner { margin:8px; padding:9px 11px; border-radius:8px; border:1px solid var(--bd); background:var(--surf2); font-size:11px; color:var(--mut); line-height:1.4; }
+  nav.col .recbanner { display:none; }
+  main { flex:1; overflow-y:auto; min-width:0; }
+  .wrap { padding:18px 20px 40px; }
+
+  /* common */
+  .shead { display:flex; align-items:baseline; gap:14px; margin-bottom:16px; }
+  .shead h1 { font:700 20px var(--sans); margin:0; }
+  .shead .meta { margin-left:auto; font:500 11.5px var(--mono); color:var(--mut); }
+  .card { background:var(--surf); border:1px solid var(--bd); border-radius:11px; padding:12px 13px; }
+  .card.dashed { border-style:dashed; opacity:.66; }
+  .ctitle { font:600 12px var(--sans); letter-spacing:.02em; color:var(--mut); margin-bottom:9px; display:flex; align-items:center; gap:8px; }
+  .ctitle .note { margin-left:auto; font:500 10px var(--mono); color:var(--mut); opacity:.8; text-transform:none; letter-spacing:0; }
+  .ctitle .scrub { margin-left:auto; font:600 11px var(--mono); color:var(--acc); }
+  .lbl { font:600 9.5px var(--sans); letter-spacing:.1em; text-transform:uppercase; color:var(--mut); }
+  .big { font:600 23px var(--mono); letter-spacing:-.01em; }
+  .calm{color:var(--calm)} .warn{color:var(--warn)} .crit{color:var(--crit)} .acc{color:var(--acc)} .mut{color:var(--mut)}
+  .grid { display:grid; gap:10px; }
+  .tile { background:var(--surf); border:1px solid var(--bd); border-radius:10px; padding:11px 12px; }
+  .tile .sub { font:500 11px var(--mono); color:var(--mut); margin-top:3px; }
+  .bar { height:7px; border-radius:5px; background:var(--surf2); overflow:hidden; display:flex; }
+  .bar > span { height:100%; }
+  .dot7 { width:8px; height:8px; border-radius:50%; flex:0 0 8px; }
+  .row { display:flex; align-items:center; gap:10px; padding:7px 4px; border-bottom:1px solid var(--bd); cursor:pointer; }
+  .row:last-child { border-bottom:none; } .row:hover { background:var(--surf2); }
+  .nm { font:600 12.5px var(--sans); } .rsub { font:500 10.5px var(--mono); color:var(--mut); }
+  .val { font:600 12px var(--mono); margin-left:auto; }
+  .pill { font:600 9px var(--mono); padding:1px 5px; border-radius:4px; border:1px solid var(--acc); color:var(--acc); }
+  .chart { width:100%; display:block; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:8px; font:500 11px var(--mono); color:var(--mut); }
+  .legend i { width:9px; height:9px; border-radius:3px; display:inline-block; margin-right:6px; vertical-align:middle; }
+  .btn { font:600 12px var(--sans); padding:7px 13px; border-radius:8px; border:1px solid var(--bd); background:var(--surf2); color:var(--tx); }
+  .btn:hover { border-color:var(--acc); }
+  .btn.acc { background:var(--acc); color:#04222a; border-color:var(--acc); } [data-theme=light] .btn.acc{color:#fff}
+  .btn.amber { border-color:var(--warn); color:var(--warn); background:transparent; }
+  .btn.tg.on { border-color:var(--acc); color:var(--acc); background:var(--navbg); }
+  input[type=range]{ -webkit-appearance:none; height:4px; border-radius:4px; background:var(--surf2); accent-color:var(--crit); }
+  input[type=text]{ font:500 12px var(--mono); background:var(--surf); border:1px solid var(--bd); color:var(--tx); border-radius:8px; padding:7px 10px 7px 30px; outline:none; }
+  input[type=text]:focus{ border-color:var(--acc); }
+  .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:12px; }
+  .search { position:relative; flex:1; min-width:220px; } .search svg{ position:absolute; left:9px; top:9px; color:var(--mut); } .search input{ width:100%; }
+  .toast { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:var(--surf); border:1px solid var(--acc); color:var(--acc); font:600 12px var(--sans); padding:9px 16px; border-radius:9px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  .toast.show { opacity:1; }
+  .kv { display:grid; grid-template-columns:92px 1fr; gap:5px 12px; font:500 12px var(--mono); }
+  .kv .k { color:var(--mut); } .kv .v { word-break:break-all; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { font:600 11px var(--mono); padding:4px 9px; border-radius:6px; background:var(--surf2); border:1px solid var(--bd); cursor:pointer; }
+  .chip:hover { border-color:var(--acc); }
+  .corecard { background:var(--bg); border:1px solid var(--bd); border-radius:8px; padding:9px 10px 6px; }
+  .corecard .ch { display:flex; justify-content:space-between; font:600 10px var(--mono); margin-bottom:4px; }
+  .tbl-h, .tbl-r { display:grid; grid-template-columns:1fr 64px 96px 122px 44px 64px; gap:10px; align-items:center; }
+  .tbl-h { padding:6px 8px; border-bottom:1px solid var(--bd); }
+  .tbl-h button { background:none; border:none; color:var(--mut); font:600 10px var(--sans); letter-spacing:.07em; text-transform:uppercase; text-align:left; padding:0; cursor:pointer; }
+  .tbl-h button.on { color:var(--acc); }
+  .tbl-r { padding:6px 8px; border-bottom:1px solid var(--bd); cursor:pointer; }
+  .tbl-r:hover { background:var(--surf2); } .tbl-r.sel { background:var(--surf2); }
+</style>
+</head>
+<body data-theme="dark">
+<header>
+  <button class="icob" id="collapse" title="Toggle sidebar"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h12"/></svg></button>
+  <div class="mark"><span class="dot"></span>Process Detective</div>
+  <span class="chipbadge" id="chipBadge">—</span>
+  <div class="hspace"></div>
+  <div class="hpill rec off" id="recPill"><span class="rdot"></span><span id="recLabel">…</span></div>
+  <div class="range-sel" id="rangeSel">
+    <button data-range="15m" class="on">15m</button>
+    <button data-range="1h">1h</button>
+    <button data-range="6h">6h</button>
+    <button data-range="24h">24h</button>
+    <button data-range="7d">7d</button>
+  </div>
+  <button class="hpill btn" id="intvl">2s</button>
+  <span class="clock mono" id="clock">--:--:--</span>
+  <button class="icob" id="theme" title="Toggle theme"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6 13 13M13 3l-1.4 1.4M4.4 11.6 3 13"/></svg></button>
+</header>
+
+<div class="shell">
+  <nav id="nav">
+    <div class="ntop" id="navItems"></div>
+    <div class="recbanner" id="recBanner">…</div>
+  </nav>
+  <main><div class="wrap" id="view"></div></main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ---------- helpers ----------
+function fmtAgo(ts){ const d=Math.floor((Date.now()-ts)/1000); if(d<60)return d+"s ago"; if(d<3600)return Math.floor(d/60)+"m ago"; return Math.floor(d/3600)+"h ago"; }
+
+// ---------- constants ----------
+const RANGE_KEYS = ['15m','1h','6h','24h','7d'];
+const SECTIONS = [
+  { id:"overview", label:"Overview", key:"o", icon:'<rect x="2" y="2" width="5" height="5"/><rect x="9" y="2" width="5" height="5"/><rect x="2" y="9" width="5" height="5"/><rect x="9" y="9" width="5" height="5"/>' },
+  { id:"cpu", label:"CPU", key:"c", icon:'<rect x="4" y="4" width="8" height="8" rx="1"/><path d="M6 1v2M10 1v2M6 13v2M10 13v2M1 6h2M1 10h2M13 6h2M13 10h2"/>' },
+  { id:"memory", label:"Memory", key:"m", icon:'<rect x="2" y="4" width="12" height="3"/><rect x="2" y="9" width="12" height="3"/>' },
+  { id:"energy", label:"Energy", key:"e", icon:'<path d="M9 1 3 9h4l-1 6 6-8H8l1-6Z"/>' },
+  { id:"disk", label:"Disk", key:"d", icon:'<ellipse cx="8" cy="8" rx="6" ry="6"/><circle cx="8" cy="8" r="1.5"/>' },
+  { id:"network", label:"Network", key:"n", icon:'<path d="M4 10l3-3 3 3M7 7v6M12 6l-3 3-3-3M9 9V3"/>' },
+  { id:"processes", label:"Processes", key:"p", icon:'<path d="M2 4h12M2 8h12M2 12h8"/>' },
+];
+const WEB_PORTS = new Set([3000,3001,4200,5000,5173,5174,8000,8080,8081,9000]);
+const MEM_COLORS = { Wired:"var(--acc)", Active:"#2a8aa0", Compressed:"var(--warn)", Inactive:"#3a5566", Free:"var(--surf2)" };
+const INTERVALS = [1000, 2000, 5000];
+const BG_INTERVAL = 8000;          // slower sampling while the window is hidden
+const RELOAD_AFTER = 86400000;     // self-heal: reload after 24h, only while hidden
+const CAP = 450, PCAP = 90;
+
+// ---------- state ----------
+const state = {
+  sys:null, procs:[], detail:null,
+  threshold:60, devOnly:false, search:"", groupFilter:null, sortKey:"cpu", sortDir:-1, sel:0,
+  theme:"dark", paused:false, intervalIdx:1, collapsed:false,
+  sampleN:0, bootAt:Date.now(),
+  profiling:null, profileResult:{},
+  range:"15m",          // active range key
+  serverHist:[],        // downsampled server history (longer ranges)
+  serverHistTimer:null, // refetch timer
+  serverHistLoaded:false,
+  sampling:false,       // true while POST /api/sample is in-flight
+  sampleResult:null,    // last StackSample result (null = not yet run)
+  powerMeasuring:false, // true while POST /api/powermetrics is in-flight
+  powerResult:null,     // last PowerSnapshot result (null = not yet run)
+  dockerMeasuring:false,// true while POST /api/docker is in-flight
+  dockerResult:null,    // last DockerStatsSnapshot (null = not yet run)
+  logMeasuring:false,   // true while POST /api/log/:pid is in-flight
+  logResult:null,       // last LogTailSnapshot (null = not yet run)
+  fsChurnMeasuring:false, // true while POST /api/fschurn/:pid is in-flight
+  fsChurnResult:null,     // last FsChurnSnapshot (null = not yet run)
+  readMeasuring:false,    // true while POST /api/readdelta/:pid is in-flight
+  readResult:null,        // last ReadActivitySnapshot (null = not yet run)
+};
+const H = []; // system series: {t,cpu,cpuUser,mem,netRx,netTx,energy,diskR,diskW}
+const CH = []; // per-core: CH[i] = [{t,v}]
+const PH = {}; // per-process cpu: pid -> [{t,v}]
+let route = { section:"overview", pid:null, prev:"overview" };
+let scrub = null; // {chart, idx}
+
+// ---------- utils ----------
+const $ = (id) => document.getElementById(id);
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+function esc(t){ return (t==null?"":String(t)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function fmtBytes(b){ if(!b||b<1)return "0 B"; if(b<1024)return b.toFixed(0)+" B"; const u=["KB","MB","GB","TB"]; let i=-1; do{b/=1024;i++;}while(b>=1024&&i<3); return b.toFixed(b<10?1:0)+" "+u[i]; }
+function fmtRate(b){ return fmtBytes(b)+"/s"; }
+function fmtUp(s){ const d=s/86400|0,h=(s%86400)/3600|0,m=(s%3600)/60|0; return d?d+"d "+h+"h":h?h+"h "+m+"m":m+"m"; }
+function fmtElapsed(s){ s=Math.max(0,s|0); const d=s/86400|0,h=(s%86400)/3600|0,m=(s%3600)/60|0,ss=s%60; return d?d+"d "+h+"h":h?h+"h "+m+"m":m?m+"m "+ss+"s":ss+"s"; }
+function sevOf(v){ const r=v/state.threshold; return r<0.6?"calm":r<1?"warn":"crit"; }
+function sevHex(v){ return "var(--"+sevOf(v)+")"; }
+function toast(m){ const t=$("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),1800); }
+
+// ---------- range selector ----------
+/** Returns the sample array the main timeline sections should render. */
+function histSamples(){ return state.range==="15m" ? H : state.serverHist; }
+function isLiveRange(){ return state.range==="15m"; }
+
+async function fetchServerHist(){
+  try{
+    const d = await fetchJSON("/api/history?range="+state.range+"&maxPoints=600");
+    if(d && Array.isArray(d.samples)){
+      // Map server samples to client shape (energy absent → 0)
+      state.serverHist = d.samples.map(s=>({...s, energy: s.energy||0}));
+    }
+  }catch(e){ /* keep last */ }
+}
+
+function setRange(r){
+  state.range=r;
+  // Update pill buttons
+  const sel=$("rangeSel");
+  if(sel) sel.querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.dataset.range===r));
+  // Clear server hist refetch timer
+  if(state.serverHistTimer){ clearInterval(state.serverHistTimer); state.serverHistTimer=null; }
+  if(!isLiveRange()){
+    fetchServerHist().then(()=>render());
+    state.serverHistTimer = setInterval(()=>{ fetchServerHist().then(()=>render()); }, 30000);
+  } else {
+    state.serverHist=[];
+    render();
+  }
+}
+
+// ---------- charts ----------
+function pathFor(samples, getV, W, Hh, maxV){
+  if(!samples.length) return {line:"",area:""};
+  const n=samples.length, max=maxV||Math.max(1, ...samples.filter(s=>!s.gap).map(getV));
+  let segs=[], cur=[];
+  // Break the line on explicit gap markers (resume-after-pause) or a real time
+  // jump >25s (sleep/suspend) — NOT on slow background sampling.
+  for(let i=0;i<n;i++){
+    const s=samples[i];
+    if(s.gap || (i>0 && (s.t - samples[i-1].t) > 25000)){ if(cur.length){segs.push(cur);cur=[];} if(s.gap) continue; }
+    const x = n===1?0:(i/(n-1))*W;
+    const y = Hh - clamp(getV(s)/max,0,1)*Hh;
+    cur.push([x,y]);
+  }
+  if(cur.length)segs.push(cur);
+  const line = segs.map(s=>"M"+s.map(p=>p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" L")).join(" ");
+  const area = segs.map(s=>{ const f=s[0],l=s[s.length-1]; return "M"+f[0].toFixed(1)+" "+Hh+" L"+s.map(p=>p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" L")+" L"+l[0].toFixed(1)+" "+Hh+" Z"; }).join(" ");
+  return {line, area};
+}
+function timeline(samples, lines, opts){
+  opts=opts||{}; const W=600, Hh=opts.h||160, maxV=opts.max||null;
+  let svg='<svg class="chart" viewBox="0 0 '+W+' '+Hh+'" height="'+Hh+'" preserveAspectRatio="none">';
+  lines.forEach(L=>{
+    const {line,area}=pathFor(samples, L.get, W, Hh, maxV);
+    if(L.area) svg+='<path d="'+area+'" fill="'+L.color+'" opacity="0.13"/>';
+    svg+='<path d="'+line+'" fill="none" stroke="'+L.color+'" stroke-width="'+(L.w||1.6)+'"'+(L.dash?' stroke-dasharray="3 3" opacity="0.7"':'')+'/>';
+  });
+  if(scrub && scrub.id===opts.id && samples.length){ const x=(scrub.idx/Math.max(1,samples.length-1))*W; svg+='<line x1="'+x+'" y1="0" x2="'+x+'" y2="'+Hh+'" stroke="var(--acc)" stroke-width="1" opacity="0.7"/>'; }
+  return svg+'</svg>';
+}
+function lastV(arr){ for(let k=arr.length-1;k>=0;k--){ if(!arr[k].gap) return arr[k].v; } return 0; }
+function spark(arr, color, w, h){ w=w||56; h=h||16; if(!arr||!arr.length) return '<svg width="'+w+'" height="'+h+'"></svg>'; const s=arr.map((v,i)=>({t:i,v})); const {line}=pathFor(s,p=>p.v,w,h,Math.max(100,...arr)); return '<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><path d="'+line+'" fill="none" stroke="'+color+'" stroke-width="1.3"/></svg>'; }
+
+// ---------- history ----------
+function pushHistory(sys, procs){
+  const t = Date.now();
+  const energy = procs.reduce((s,p)=>s+(p.energy||0),0);
+  H.push({ t, cpu:sys.cpu.usagePct, cpuUser:sys.cpu.user, mem:sys.memory.usedPct,
+    netRx:sys.network.rxBytesPerSec, netTx:sys.network.txBytesPerSec, energy,
+    diskR:sys.disk.readBytesPerSec, diskW:sys.disk.writeBytesPerSec });
+  if(H.length>CAP) H.shift();
+  // per-core estimate (precise per-core needs elevated access)
+  const cores = sys.cpu.cores.total||1;
+  if(CH.length!==cores){ CH.length=0; for(let i=0;i<cores;i++) CH.push([]); }
+  const est = estCores(sys.cpu.usagePct, sys.cpu.cores, state.sampleN);
+  for(let i=0;i<cores;i++){ CH[i].push({t,v:est[i]}); if(CH[i].length>CAP)CH[i].shift(); }
+  // per-process cpu for the hot set + selected
+  const keep = new Set(procs.slice(0,80).map(p=>p.pid)); if(route.pid)keep.add(route.pid);
+  procs.forEach(p=>{ if(!keep.has(p.pid))return; (PH[p.pid]=PH[p.pid]||[]).push({t,v:p.cpu}); if(PH[p.pid].length>PCAP)PH[p.pid].shift(); });
+  for(const pid in PH){ if(!keep.has(+pid)) delete PH[pid]; }
+  state.sampleN++;
+  // profiling
+  if(state.profiling){ const p=procs.find(x=>x.pid===state.profiling.pid); if(p)state.profiling.samples.push(p.cpu); if(t>=state.profiling.until){ const s=state.profiling.samples; state.profileResult[state.profiling.pid]={peak:Math.max(0,...s),avg:s.reduce((a,b)=>a+b,0)/(s.length||1),n:s.length}; state.profiling=null; } }
+}
+function estCores(usage, cores, n){
+  const out=[]; for(let i=0;i<cores.total;i++){ const isP=i<cores.performance; const ph=n*0.5+i*1.3; const wob=(Math.sin(ph)+Math.sin(ph*0.37+i))*6; let v=usage*(isP?1.25:0.8)+wob+(isP?5:-3); out.push(clamp(v,0,100)); } return out;
+}
+function seedHistory(sys, procs){
+  const interval=INTERVALS[state.intervalIdx], now=Date.now(), N=150;
+  const energy=procs.reduce((s,p)=>s+(p.energy||0),0);
+  const cores=sys.cpu.cores.total||1; CH.length=0; for(let i=0;i<cores;i++)CH.push([]);
+  for(let k=N;k>0;k--){ const t=now-k*interval; const j=(x)=>x*(0.85+0.3*Math.sin(k*0.4+x));
+    H.push({t, cpu:clamp(j(sys.cpu.usagePct),0,100), cpuUser:clamp(j(sys.cpu.user),0,100), mem:clamp(sys.memory.usedPct+Math.sin(k*0.2)*2,0,100),
+      netRx:Math.max(0,j(sys.network.rxBytesPerSec)), netTx:Math.max(0,j(sys.network.txBytesPerSec)), energy:Math.max(0,j(energy)),
+      diskR:Math.max(0,j(sys.disk.readBytesPerSec)), diskW:Math.max(0,j(sys.disk.writeBytesPerSec))});
+    const est=estCores(H[H.length-1].cpu, sys.cpu.cores, N-k); for(let i=0;i<cores;i++)CH[i].push({t,v:est[i]});
+  }
+}
+
+// ---------- collection (always on; render only when visible) ----------
+let pollTimer=null;
+function visible(){ return document.visibilityState==="visible"; }
+function updateStatus(){
+  const pill=$("recPill"), lbl=$("recLabel"), ban=$("recBanner");
+  if(state.paused){ pill.className="hpill rec paused"; lbl.textContent="PAUSED"; ban.textContent="⏸ Paused — collection stopped. Press Space (or the pill) to resume."; }
+  else { pill.className="hpill rec on"; lbl.textContent=visible()?"COLLECTING":"COLLECTING ·bg"; ban.textContent="● Collecting continuously — in-memory, session only, discarded on close."+(visible()?"":" (window hidden — sampling at a slower rate)"); }
+}
+function setPaused(p){
+  const was=state.paused; state.paused=p;
+  if(was && !p){ const t=Date.now(); H.push({t,gap:true}); CH.forEach(a=>a.push({t,gap:true})); } // break the chart across the pause
+  updateStatus(); render(); reschedule();
+}
+
+// ---------- data ----------
+async function fetchJSON(u,o){ const r=await fetch(u,o); return r.json(); }
+async function tick(){
+  if(state.paused){ reschedule(); return; }
+  try{
+    const [sys, pr] = await Promise.all([fetchJSON("/api/system"), fetchJSON("/api/processes")]);
+    state.sys=sys; state.procs=pr.processes;
+    $("chipBadge").textContent = sys.host.chip;
+    if(!H.length){
+      // Try to seed from server history first; fall back to synthetic seed
+      try{
+        const hist = await fetchJSON("/api/history?range=1h&maxPoints=450");
+        if(hist && hist.samples && hist.samples.length>1){
+          for(const s of hist.samples) H.push({...s, energy: s.energy||0});
+          // Seed per-core from the server data (estimated)
+          const cores=sys.cpu.cores.total||1; CH.length=0; for(let i=0;i<cores;i++)CH.push([]);
+        } else {
+          seedHistory(sys, state.procs);
+        }
+      }catch(e){ seedHistory(sys, state.procs); }
+    }
+    pushHistory(sys, state.procs);
+    if(visible()) render(); // collect always; only touch the DOM when on screen
+  }catch(e){ /* keep last */ }
+  reschedule();
+}
+function reschedule(){
+  if(pollTimer) clearTimeout(pollTimer);
+  // Self-heal: after a long uptime, reload while hidden to reset any engine heap creep.
+  if(!visible() && Date.now()-state.bootAt > RELOAD_AFTER){ location.reload(); return; }
+  const delay = state.paused ? 1000 : (visible() ? INTERVALS[state.intervalIdx] : BG_INTERVAL);
+  pollTimer = setTimeout(tick, delay);
+}
+async function loadDetail(pid){
+  state.detail=null; state.sampleResult=null; state.sampling=false; state._deepDetail=null;
+  state.dockerResult=null; state.dockerMeasuring=false;
+  state.logResult=null; state.logMeasuring=false;
+  state.fsChurnResult=null; state.fsChurnMeasuring=false;
+  state.readResult=null; state.readMeasuring=false; render();
+  try{ state.detail=await fetchJSON("/api/inspect/"+pid); }catch(e){ state.detail={error:true}; }
+  render();
+}
+
+// ---------- router ----------
+function parseHash(){
+  const h=(location.hash||"#/overview").replace(/^#\//,"");
+  const m=h.match(/^proc\/(\d+)/);
+  if(m){ if(route.section!=="proc")route.prev=route.section; return {section:"proc", pid:parseInt(m[1],10), prev:route.prev}; }
+  const sec=SECTIONS.find(s=>s.id===h)?h:"overview";
+  return { section:sec, pid:null, prev:sec };
+}
+function onRoute(){
+  const r=parseHash(); const changedPid = r.pid!==route.pid;
+  route=r; state.sel=0;
+  renderNav();
+  if(route.section==="proc" && route.pid && changedPid) loadDetail(route.pid);
+  render();
+}
+function go(section){ location.hash="#/"+section; }
+function openProc(pid){ location.hash="#/proc/"+pid; }
+
+// ---------- render shell ----------
+function renderNav(){
+  $("navItems").innerHTML = SECTIONS.map((s,i)=>
+    '<div class="nitem'+((route.section===s.id||(route.section==="proc"&&s.id==="processes"))?" active":"")+'" data-go="'+s.id+'">'
+    +'<span class="ico"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">'+s.icon+'</svg></span>'
+    +'<span class="nlabel">'+s.label+'</span><span class="kh">'+(i+1)+'</span></div>').join("");
+  $("navItems").querySelectorAll("[data-go]").forEach(el=>el.onclick=()=>go(el.dataset.go));
+}
+function render(){
+  if(!state.sys && route.section!=="proc"){ $("view").innerHTML='<div class="mut" style="padding:40px">Collecting…</div>'; return; }
+  const fn = { overview:rOverview, cpu:rCPU, memory:rMemory, energy:rEnergy, disk:rDisk, network:rNetwork, processes:rProcesses, proc:rDetail }[route.section];
+  $("view").innerHTML = fn ? fn() : "";
+  bindView();
+}
+function bindView(){
+  $("view").querySelectorAll("[data-proc]").forEach(el=>el.onclick=()=>openProc(+el.dataset.proc));
+  $("view").querySelectorAll("[data-grp]").forEach(el=>el.onclick=()=>{ state.groupFilter=el.dataset.grp; state.search=""; go("processes"); });
+  $("view").querySelectorAll("[data-scrub]").forEach(el=>{
+    el.onmousemove=(e)=>{ const r=el.getBoundingClientRect(); const len=H.length; if(!len)return; scrub={id:el.dataset.scrub, idx:Math.round(clamp((e.clientX-r.left)/r.width,0,1)*(len-1))}; render(); };
+    el.onmouseleave=()=>{ scrub=null; render(); };
+  });
+}
+function scrubReadout(id, samples, get, suffix){
+  if(!scrub||scrub.id!==id||!samples.length) return "";
+  const s=samples[clamp(scrub.idx,0,samples.length-1)]; const ago=((Date.now()-s.t)/60000).toFixed(1);
+  return '<span class="scrub">'+get(s)+(suffix||"")+' · −'+ago+'m</span>';
+}
+
+// ---------- sections ----------
+function metaLine(){ const s=state.sys; return s.host.model+" · up "+fmtUp(s.host.uptimeSeconds)+" · "+s.processes.total+" processes · "+s.processes.threads+" threads"+(s.server?" · monitor "+fmtBytes(s.server.rssBytes)+" rss, up "+fmtUp(s.server.uptimeSeconds):""); }
+function topByCpu(n){ return [...state.procs].sort((a,b)=>b.cpu-a.cpu).slice(0,n); }
+function procRow(p, valHtml){ const sc=sevOf(p.cpu);
+  return '<div class="row" data-proc="'+p.pid+'"><span class="dot7" style="background:'+sevHex(p.cpu)+';box-shadow:0 0 5px '+sevHex(p.cpu)+'"></span>'
+    +'<div><div class="nm">'+esc(p.name)+(p.isDev?' <span class="pill">DEV</span>':'')+'</div><div class="rsub">'+esc(p.friendly)+' · '+p.pid+'</div></div>'
+    +'<span style="margin-left:auto">'+spark((PH[p.pid]||[]).map(x=>x.v), sevHex(p.cpu))+'</span>'
+    +(valHtml||'<span class="val '+sc+'">'+p.cpu.toFixed(1)+'%</span>')+'</div>'; }
+
+function rOverview(){
+  const s=state.sys, c=s.cpu, m=s.memory;
+  const tiles=[
+    ["CPU", '<span class="big '+sevOf(c.usagePct)+'">'+c.usagePct.toFixed(0)+'%</span>', c.user+"% user · "+c.sys+"% sys"],
+    ["Memory", '<span class="big '+sevOf(m.usedPct)+'">'+m.usedPct.toFixed(0)+'%</span>', fmtBytes(m.usedBytes)+" / "+fmtBytes(m.totalBytes)],
+    ["Energy", '<span class="big">'+state.procs.reduce((a,p)=>a+(p.energy||0),0).toFixed(0)+'</span>', "impact index"],
+    ["Network", '<span class="big acc" style="font-size:18px">↓'+fmtRate(s.network.rxBytesPerSec)+'</span>', "↑"+fmtRate(s.network.txBytesPerSec)],
+    ["Disk", '<span class="big" style="font-size:18px">↓'+fmtRate(s.disk.readBytesPerSec)+'</span>', "↑"+fmtRate(s.disk.writeBytesPerSec)],
+    ["Load", '<span class="big">'+c.loadAvg[0].toFixed(2)+'</span>', c.loadAvg[1].toFixed(2)+" · "+c.loadAvg[2].toFixed(2)],
+  ];
+  return '<div class="shead"><h1>Overview</h1><span class="meta">'+esc(metaLine())+'</span></div>'
+    +'<div class="grid" style="grid-template-columns:repeat(6,1fr);margin-bottom:10px">'
+    + tiles.map(t=>'<div class="tile"><div class="lbl">'+t[0]+'</div>'+t[1]+'<div class="sub">'+t[2]+'</div></div>').join("")+'</div>'
+    +'<div class="grid" style="grid-template-columns:2fr 1fr;margin-bottom:10px">'
+      +'<div class="card" data-scrub="ov-cpu"><div class="ctitle">CPU LOAD'+scrubReadout("ov-cpu",histSamples(),s=>s.cpu.toFixed(1),"%")+'</div>'+timeline(histSamples(),[{get:s=>s.cpu,color:"var(--acc)",area:true}],{id:"ov-cpu",h:150,max:100})+'</div>'
+      +memCard(m)
+    +'</div>'
+    +'<div class="grid" style="grid-template-columns:1fr 1fr">'
+      +'<div class="card" data-scrub="ov-net"><div class="ctitle">NETWORK <span class="legend" style="margin:0 0 0 8px"><span><i style="background:var(--acc)"></i>rx</span><span><i style="background:var(--calm)"></i>tx</span></span>'+scrubReadout("ov-net",histSamples(),s=>fmtRate(s.netRx))+'</div>'+timeline(histSamples(),[{get:s=>s.netRx,color:"var(--acc)",area:true},{get:s=>s.netTx,color:"var(--calm)"}],{id:"ov-net",h:150})+'</div>'
+      +'<div class="card"><div class="ctitle">TOP PROCESSES<a class="note" style="cursor:pointer" onclick="location.hash=\'#/processes\'">ALL →</a></div>'+topByCpu(6).map(p=>procRow(p)).join("")+'</div>'
+    +'</div>';
+}
+function memCard(m){
+  const total=m.totalBytes||1;
+  const segs=m.segments.map(s=>'<span style="width:'+(s.bytes/total*100)+'%;background:'+(MEM_COLORS[s.label]||"#666")+'"></span>').join("");
+  const leg=m.segments.map(s=>'<span><i style="background:'+(MEM_COLORS[s.label]||"#666")+'"></i>'+s.label+' '+fmtBytes(s.bytes)+'</span>').join("");
+  return '<div class="card"><div class="ctitle">MEMORY</div><div class="bar" style="height:22px;border-radius:7px">'+segs+'</div><div class="legend">'+leg+'</div></div>';
+}
+
+function rCPU(){
+  const s=state.sys, c=s.cpu;
+  const cards=[["TOTAL",c.usagePct,sevOf(c.usagePct)],["USER",c.user,"acc"],["SYSTEM",c.sys,"warn"],["IDLE",c.idle,"mut"]];
+  const pc = c.cores.performance;
+  let cores="";
+  for(let i=0;i<c.cores.total;i++){ const lbl=i<pc?("P"+i):("E"+(i-pc)); const arr=CH[i]||[]; const cur=lastV(arr); const col=sevHex(cur);
+    cores+='<div class="corecard"><div class="ch"><span class="'+(i<pc?"acc":"mut")+'">'+lbl+'</span><span style="color:'+col+'">'+cur.toFixed(0)+'%</span></div>'
+      +'<svg class="chart" viewBox="0 0 260 52" height="42" preserveAspectRatio="none">'+(()=>{ const {line,area}=pathFor(arr,p=>p.v,260,52,100); return '<path d="'+area+'" fill="'+col+'" opacity="0.13"/><path d="'+line+'" fill="none" stroke="'+col+'" stroke-width="1.4"/>'; })()+'</svg></div>'; }
+  const rangeLabel = state.range==="15m"?"LAST 15 MIN":"LAST "+state.range.toUpperCase();
+  const coreNote = isLiveRange()?"estimated · precise per-core needs elevated access":"estimated · live-only (per-core history is live-only)";
+  return '<div class="shead"><h1>CPU</h1><span class="meta">'+esc(c.chip||s.host.chip)+' · '+c.cores.total+' cores ('+pc+'P + '+c.cores.efficiency+'E) · '+s.processes.running+' running · '+s.processes.threads+' threads</span></div>'
+    +'<div class="grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px">'+cards.map(c2=>'<div class="tile"><div class="lbl">'+c2[0]+'</div><span class="big '+c2[2]+'">'+c2[1].toFixed(1)+'%</span></div>').join("")+'</div>'
+    +'<div class="card" data-scrub="cpu-u" style="margin-bottom:10px"><div class="ctitle">USAGE · '+rangeLabel+scrubReadout("cpu-u",histSamples(),s=>s.cpu.toFixed(1),"%")+'</div>'+timeline(histSamples(),[{get:s=>s.cpu,color:"var(--acc)",area:true},{get:s=>s.cpuUser,color:"var(--mut)",dash:true,w:1.2}],{id:"cpu-u",h:160,max:100})+'</div>'
+    +'<div class="card" style="margin-bottom:10px"><div class="ctitle">PER-CORE UTILIZATION<span class="note">'+coreNote+'</span></div><div class="grid" style="grid-template-columns:repeat(5,1fr)">'+cores+'</div></div>'
+    +'<div class="grid" style="grid-template-columns:1fr 1.6fr">'
+      +'<div class="card"><div class="ctitle">LOAD AVERAGE</div><div style="display:flex;gap:20px">'+["1 MIN","5 MIN","15 MIN"].map((l,i)=>'<div><div class="lbl">'+l+'</div><span class="big">'+c.loadAvg[i].toFixed(2)+'</span></div>').join("")+'</div></div>'
+      +'<div class="card"><div class="ctitle">TOP BY CPU</div>'+topByCpu(8).map(p=>procRow(p)).join("")+'</div>'
+    +'</div>';
+}
+
+const GROUP_COLORS = ["#36c2e0","#2fd6a6","#f2b53c","#b48cff","#ff8a5b","#5b9dff","#ff5d73","#4dd6e0","#9aa3b5","#3a5566"];
+function memGroupKey(p){
+  const n=(p.name||"").toLowerCase(), c=(p.command||"").toLowerCase(), f=(p.friendly||"").toLowerCase();
+  if(n.includes("orbstack")||c.includes("orbstack")) return "OrbStack";
+  if(c.includes("/visual studio code.app/")||n.startsWith("code")||f.includes("visual studio code")) return "VS Code";
+  if(c.includes("/google chrome.app/")||n.includes("chrome")) return "Chrome";
+  if(c.includes("/claude.app/")||n.includes("claude")) return "Claude";
+  if(c.includes("/microsoft")||f.includes("microsoft")) return "Microsoft";
+  if(n==="node"||c.includes("/node ")||c.includes("mcp")||c.includes("npm exec")||c.includes("npx")) return "Node / MCP";
+  if(n.includes("safari")||n.includes("webkit")) return "Safari / WebKit";
+  if(n.includes("firefox")) return "Firefox";
+  if(c.startsWith("/system/")||c.startsWith("/usr/libexec")||c.startsWith("/usr/sbin")||n==="kernel_task"||n==="windowserver") return "macOS system";
+  const app=(p.command||"").match(/\/([^/]+)\.app\//); if(app) return app[1];
+  return p.name||"other";
+}
+function memGroups(){
+  const g={};
+  for(const p of state.procs){ const k=memGroupKey(p); (g[k]=g[k]||{mem:0,n:0}); g[k].mem+=p.mem||0; g[k].n++; }
+  let arr=Object.entries(g).map(([k,v])=>({label:k,mem:v.mem,n:v.n})).sort((a,b)=>b.mem-a.mem);
+  if(arr.length>8){ const rest=arr.slice(8); arr=arr.slice(0,8); arr.push({label:"Other apps",mem:rest.reduce((s,x)=>s+x.mem,0),n:rest.reduce((s,x)=>s+x.n,0)}); }
+  return arr;
+}
+function memDonut(groups){
+  const total=groups.reduce((s,g)=>s+g.mem,0)||1, cx=92,cy=92,r=72,ri=46; let a=-Math.PI/2, segs="";
+  groups.forEach((g,i)=>{ let frac=g.mem/total; if(frac<=0)return; const a1=a+frac*2*Math.PI, col=g.sys?"#2a3344":GROUP_COLORS[i%GROUP_COLORS.length];
+    const big=frac>0.5?1:0;
+    const x0=cx+r*Math.cos(a),y0=cy+r*Math.sin(a),x1=cx+r*Math.cos(a1),y1=cy+r*Math.sin(a1);
+    const j0=cx+ri*Math.cos(a),k0=cy+ri*Math.sin(a),j1=cx+ri*Math.cos(a1),k1=cy+ri*Math.sin(a1);
+    segs+='<path d="M'+x0.toFixed(1)+' '+y0.toFixed(1)+' A'+r+' '+r+' 0 '+big+' 1 '+x1.toFixed(1)+' '+y1.toFixed(1)+' L'+j1.toFixed(1)+' '+k1.toFixed(1)+' A'+ri+' '+ri+' 0 '+big+' 0 '+j0.toFixed(1)+' '+k0.toFixed(1)+' Z" fill="'+col+'"><title>'+esc(g.label)+' '+g.mem.toFixed(1)+'%</title></path>';
+    a=a1; });
+  return '<svg width="184" height="184" viewBox="0 0 184 184">'+segs
+    +'<text x="92" y="88" text-anchor="middle" class="mono" fill="var(--tx)" font-size="22" font-weight="700">'+total.toFixed(0)+'%</text>'
+    +'<text x="92" y="106" text-anchor="middle" fill="var(--mut)" font-size="10">of RAM</text></svg>';
+}
+
+function rMemory(){
+  const m=state.sys.memory, total=m.totalBytes||1;
+  const segs=m.segments.map(s=>'<span style="width:'+(s.bytes/total*100)+'%;background:'+(MEM_COLORS[s.label]||"#666")+'"></span>').join("");
+  const leg=m.segments.map(s=>'<span><i style="background:'+(MEM_COLORS[s.label]||"#666")+'"></i>'+s.label+' '+fmtBytes(s.bytes)+'</span>').join("");
+  const pw = m.pressure==="critical"?"crit":m.pressure==="warning"?"warn":"calm";
+  const top=[...state.procs].sort((a,b)=>b.mem-a.mem).slice(0,8);
+  return '<div class="shead"><h1>Memory</h1><span class="meta">'+fmtBytes(m.usedBytes)+' used of '+fmtBytes(m.totalBytes)+'</span></div>'
+    +'<div class="grid" style="grid-template-columns:1.4fr 1fr;margin-bottom:10px">'
+      +'<div class="card"><div class="ctitle">COMPOSITION</div><div class="bar" style="height:24px;border-radius:7px">'+segs+'</div><div class="legend">'+leg+'</div></div>'
+      +'<div class="card"><div class="ctitle">MEMORY PRESSURE</div><span class="big '+pw+'">'+m.usedPct.toFixed(0)+'%</span> <span class="'+pw+'" style="font:600 12px var(--mono)">'+m.pressure.toUpperCase()+'</span>'
+        +'<div class="bar" style="margin:9px 0"><span style="width:'+m.usedPct+'%;background:var(--'+pw+')"></span></div>'
+        +'<div class="kv"><span class="k">Swap</span><span class="v">'+fmtBytes(m.swap.usedBytes)+' / '+fmtBytes(m.swap.totalBytes)+'</span><span class="k">Cached</span><span class="v">'+fmtBytes(m.cachedBytes)+'</span></div></div>'
+    +'</div>'
+    +(()=>{ const groups=memGroups(); const rem=Math.max(0, m.usedPct-groups.reduce((s,g)=>s+g.mem,0)); if(rem>0.5)groups.push({label:"System / wired / cached",mem:rem,n:0,sys:true});
+      const legend=groups.map((g,i)=>{ const col=g.sys?"#2a3344":GROUP_COLORS[i%GROUP_COLORS.length]; const sub=g.sys?"wired · compressed · cache":(g.n+" proc"+(g.n>1?"s":"")); return '<div class="row" style="cursor:'+(g.sys?"default":"pointer")+';padding:5px 4px"'+(g.sys?"":' data-grp="'+esc(g.label)+'"')+'><span class="dot7" style="border-radius:3px;background:'+col+'"></span><span class="nm">'+esc(g.label)+'</span><span class="rsub" style="margin-left:6px">'+sub+'</span><span class="val">'+g.mem.toFixed(1)+'% · '+fmtBytes(g.mem/100*total)+'</span></div>'; }).join("");
+      return '<div class="card" style="margin-bottom:10px"><div class="ctitle">MEMORY BY PROCESS GROUP<span class="note">click a group to filter the process list</span></div>'
+        +'<div style="display:flex;gap:22px;align-items:center;flex-wrap:wrap"><div>'+memDonut(groups)+'</div><div style="flex:1;min-width:260px">'+legend+'</div></div></div>'; })()
+    +'<div class="card" data-scrub="mem-u" style="margin-bottom:10px"><div class="ctitle">USED MEMORY · '+(state.range==="15m"?"LAST 15 MIN":"LAST "+state.range.toUpperCase())+scrubReadout("mem-u",histSamples(),s=>s.mem.toFixed(1),"%")+'</div>'+timeline(histSamples(),[{get:s=>s.mem,color:"var(--acc)",area:true}],{id:"mem-u",h:160,max:100})+'</div>'
+    +'<div class="card"><div class="ctitle">TOP BY MEMORY</div>'+top.map(p=>procRow(p,'<span class="val">'+p.mem.toFixed(1)+'%</span>')).join("")+'</div>';
+}
+
+function rEnergy(){
+  const s=state.sys, pw=s.power;
+  const ranked=[...state.procs].filter(p=>p.energy!=null).sort((a,b)=>(b.energy||0)-(a.energy||0)).slice(0,8);
+  const maxE=Math.max(1,...ranked.map(p=>p.energy||0));
+  const batBar = pw.hasBattery? '<div class="bar" style="margin:8px 0"><span style="width:'+(pw.batteryPct||0)+'%;background:var(--'+((pw.batteryPct||0)>50?"calm":(pw.batteryPct||0)>20?"warn":"crit")+')"></span></div>' : '';
+  // Per-app power panel HTML
+  const pr = state.powerResult;
+  let powerPanel = '';
+  if(state.powerMeasuring){
+    powerPanel = '<div class="rsub" style="padding:8px 0"><span class="mut">Measuring per-app power (1s)… macOS will ask for your password.</span></div>';
+  } else if(pr && pr.available && pr.topCpu && pr.topCpu.length){
+    const gpuLine = (pr.gpuActiveResidencyPct!=null||pr.gpuPowerMw!=null)
+      ?'<div class="rsub" style="margin:8px 0 4px"><span class="acc">GPU active '+(pr.gpuActiveResidencyPct!=null?pr.gpuActiveResidencyPct.toFixed(1)+'%':"—")+' · '+(pr.gpuPowerMw!=null?pr.gpuPowerMw.toFixed(0)+' mW':"—")+' power</span></div>':'' ;
+    const cpuRows = pr.topCpu.slice(0,8).map(t=>'<div class="row"><span class="nm">'+esc(t.name)+'</span><span class="val warn">'+t.cpuMsPerS.toFixed(1)+' ms/s</span></div>').join('');
+    const gpuRows = pr.topGpu&&pr.topGpu.length?'<div class="ctitle" style="margin-top:10px">TOP GPU ms/s</div>'+pr.topGpu.slice(0,8).map(t=>'<div class="row"><span class="nm">'+esc(t.name)+'</span><span class="val acc">'+t.gpuMsPerS.toFixed(1)+' ms/s</span></div>').join(''):'<div class="rsub" style="margin-top:8px"><span class="mut">Per-app GPU ms/s isn\'t exposed by macOS on Apple Silicon — system GPU is shown above.</span></div>';
+    const rawBlock = pr.raw?'<details style="margin-top:8px"><summary class="rsub" style="cursor:pointer">Raw powermetrics output</summary><pre class="mono" style="font-size:10px;background:var(--bg);padding:8px;border-radius:6px;overflow:auto;max-height:220px">'+esc((pr.raw||'').slice(0,4000))+'</pre></details>':'';
+    powerPanel = gpuLine+'<div class="ctitle">TOP CPU ms/s</div>'+cpuRows+gpuRows+rawBlock;
+  } else if(pr && !pr.available){
+    powerPanel = '<div class="rsub" style="padding:4px 0"><span class="mut">'+esc(pr.note||"unavailable")+'</span></div>';
+  } else if(pr && pr.available && pr.raw){
+    powerPanel = '<details style="margin-top:6px"><summary class="rsub" style="cursor:pointer">Raw powermetrics output</summary><pre class="mono" style="font-size:10px;background:var(--bg);padding:8px;border-radius:6px;overflow:auto;max-height:200px">'+esc((pr.raw||'').slice(0,3000))+'</pre></details>';
+  } else {
+    powerPanel = '<div class="rsub" style="padding:4px 0">Click to measure per-app GPU/CPU usage via powermetrics. macOS will ask for your password.</div>';
+  }
+
+  return '<div class="shead"><h1>Energy</h1></div>'
+    +'<div class="grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">'
+      +'<div class="tile"><div class="lbl">Battery</div><span class="big">'+(pw.hasBattery?(pw.batteryPct+"%"):"—")+'</span>'+batBar+'<div class="sub">'+(pw.charging?"charging":"not charging")+' · '+esc(pw.source||"AC")+'</div></div>'
+      +'<div class="tile"><div class="lbl">Thermal pressure</div><span class="big '+(pw.thermalNominal?"calm":"warn")+'">'+(pw.thermalNominal?"NOMINAL":"LIMITED")+'</span><div class="sub">pmset -g therm</div></div>'
+      +'<div class="tile card dashed"><div class="lbl">Fan RPM</div><span class="big mut">— — —</span><div class="sub">requires elevated access (SMC)</div></div>'
+    +'</div>'
+    +'<div class="card" data-scrub="en" style="margin-bottom:10px"><div class="ctitle">TOTAL ENERGY IMPACT · LAST 15 MIN<span class="note">live-only · not persisted</span>'+scrubReadout("en",H,s=>s.energy.toFixed(1))+'</div>'+timeline(H,[{get:s=>s.energy,color:"var(--warn)",area:true}],{id:"en",h:160})+'</div>'
+    +'<div class="card" style="margin-bottom:10px"><div class="ctitle">ENERGY IMPACT RANKING</div>'+ranked.map(p=>'<div class="row" data-proc="'+p.pid+'"><div style="width:150px"><div class="nm">'+esc(p.name)+'</div><div class="rsub">'+p.pid+'</div></div>'
+      +'<div class="bar" style="flex:1"><span style="width:'+((p.energy||0)/maxE*100)+'%;background:var(--warn)"></span></div><span class="val warn">'+(p.energy||0).toFixed(1)+'</span></div>').join("")+'</div>'
+    +'<div class="card" id="powerPanel"><div class="ctitle">PER-APP POWER (admin)<span class="note">powermetrics · on-demand · opt-in</span></div>'
+      +powerPanel
+      +'<div style="margin-top:8px"><button class="btn" id="powerBtn"'+(state.powerMeasuring?' disabled':'')+'">⚡ Measure per-app GPU/CPU (admin)</button></div>'
+    +'</div>';
+}
+
+function rDisk(){
+  const s=state.sys;
+  const vols=s.storage.volumes.map(v=>{ const pc=v.usedPct; const col=pc<70?"acc":pc<88?"warn":"crit";
+    return '<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font:600 12px var(--mono)"><span>'+esc(v.name)+'</span><span class="mut">'+fmtBytes(v.usedBytes)+' used · '+fmtBytes(v.totalBytes-v.usedBytes)+' free</span></div><div class="bar" style="margin-top:5px"><span style="width:'+pc+'%;background:var(--'+col+')"></span></div></div>'; }).join("");
+  return '<div class="shead"><h1>Disk</h1></div>'
+    +'<div class="card" style="margin-bottom:10px"><div class="ctitle">VOLUMES</div>'+vols+'</div>'
+    +'<div class="card" data-scrub="dk" style="margin-bottom:10px"><div class="ctitle">I/O THROUGHPUT · '+(state.range==="15m"?"LAST 15 MIN":"LAST "+state.range.toUpperCase())+' <span class="legend" style="margin:0 0 0 8px"><span><i style="background:var(--acc)"></i>read</span><span><i style="background:var(--calm)"></i>write</span></span>'+scrubReadout("dk",histSamples(),s=>fmtRate(s.diskR))+'</div>'+timeline(histSamples(),[{get:s=>s.diskR,color:"var(--acc)",area:true},{get:s=>s.diskW,color:"var(--calm)"}],{id:"dk",h:160})+'</div>'
+    +'<div class="card dashed"><div class="ctitle">BUSIEST PROCESSES BY DISK<span class="note">requires elevated access (fs_usage)</span></div><div class="row"><span class="mut nm">Per-process disk bytes need elevated access</span><span class="val mut">— MB/s</span></div></div>';
+}
+
+function rNetwork(){
+  const n=state.sys.network;
+  const cards=[["ESTABLISHED",n.connections.established,""],["LISTENING",n.connections.listen,"acc"],["RX TOTAL",fmtBytes(n.rxTotalBytes),""],["TX TOTAL",fmtBytes(n.txTotalBytes),""]];
+  const ports = n.ports.slice(0,14).map(p=>{ const web=WEB_PORTS.has(p.port);
+    return '<div class="row"'+(p.pid?' data-proc="'+p.pid+'"':'')+'><span class="acc mono" style="font:600 15px var(--mono);width:54px">'+p.port+'</span><div><div class="nm">'+esc(p.command)+'</div><div class="rsub">pid '+p.pid+'</div></div>'
+      +(web?'<button class="btn acc" style="margin-left:auto;padding:4px 10px" onclick="event.stopPropagation();window.open(\'http://localhost:'+p.port+'\')">Open ↗</button>':'<span class="val mut"> </span>')+'</div>'; }).join("");
+  return '<div class="shead"><h1>Network</h1></div>'
+    +'<div class="grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px">'+cards.map(c=>'<div class="tile"><div class="lbl">'+c[0]+'</div><span class="big '+c[2]+'" style="font-size:20px">'+c[1]+'</span></div>').join("")+'</div>'
+    +'<div class="card" data-scrub="nw" style="margin-bottom:10px"><div class="ctitle">THROUGHPUT · '+(state.range==="15m"?"LAST 15 MIN":"LAST "+state.range.toUpperCase())+' <span class="legend" style="margin:0 0 0 8px"><span><i style="background:var(--acc)"></i>down</span><span><i style="background:var(--calm)"></i>up</span></span>'+scrubReadout("nw",histSamples(),s=>fmtRate(s.netRx))+'</div>'+timeline(histSamples(),[{get:s=>s.netRx,color:"var(--acc)",area:true},{get:s=>s.netTx,color:"var(--calm)"}],{id:"nw",h:160})+'</div>'
+    +'<div class="grid" style="grid-template-columns:1.2fr 1fr">'
+      +'<div class="card"><div class="ctitle">LISTENING PORTS</div>'+(ports||'<div class="row"><span class="mut">none visible</span></div>')+'</div>'
+      +'<div class="card dashed"><div class="ctitle">TOP TALKERS<span class="note">bytes: elevated</span></div><div class="row"><span class="mut">Per-process network bytes need elevated access</span></div></div>'
+    +'</div>';
+}
+
+function rProcesses(){
+  let rows=[...state.procs];
+  if(state.devOnly) rows=rows.filter(p=>p.isDev);
+  if(state.groupFilter) rows=rows.filter(p=>memGroupKey(p)===state.groupFilter);
+  if(state.search){ const q=state.search.toLowerCase(); rows=rows.filter(p=>(p.name+" "+p.pid+" "+(p.command||"")+" "+p.friendly).toLowerCase().includes(q)); }
+  const key=state.sortKey, dir=state.sortDir;
+  rows.sort((a,b)=>{ const va=key==="name"?a.name:a[key]||0, vb=key==="name"?b.name:b[key]||0; return va<vb?-dir:va>vb?dir:0; });
+  state._rows=rows;
+  const cols=[["name","PROCESS"],["pid","PID"],["cpu","CPU %"],["mem","MEMORY"],["threads","TH"],["energy","ENERGY"]];
+  const head='<div class="tbl-h">'+cols.map(c=>'<button class="'+(state.sortKey===c[0]?"on":"")+'" data-sort="'+c[0]+'">'+c[1]+(state.sortKey===c[0]?(state.sortDir<0?" ↓":" ↑"):"")+'</button>').join("")+'</div>';
+  const body=rows.slice(0,200).map((p,i)=>{ const sc=sevOf(p.cpu);
+    return '<div class="tbl-r'+(i===state.sel?" sel":"")+'" data-proc="'+p.pid+'">'
+      +'<div style="display:flex;align-items:center;gap:8px;min-width:0"><span class="dot7" style="background:'+sevHex(p.cpu)+'"></span><div style="min-width:0"><div class="nm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(p.name)+(p.isDev?' <span class="pill">DEV</span>':'')+'</div><div class="rsub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(p.friendly)+' · '+p.pid+'</div></div></div>'
+      +'<span class="val mono" style="margin:0">'+p.pid+'</span>'
+      +'<div><span class="'+sc+' mono" style="font:600 12px var(--mono)">'+p.cpu.toFixed(1)+'%</span><div class="bar" style="height:3px;margin-top:3px"><span style="width:'+clamp(p.cpu,0,100)+'%;background:'+sevHex(p.cpu)+'"></span></div></div>'
+      +'<span class="mono mut" style="font-size:11px">'+p.mem.toFixed(1)+'%</span>'
+      +'<span class="mono mut" style="font-size:11px">'+(p.threads??"—")+'</span>'
+      +'<span class="mono mut" style="font-size:11px">'+(p.energy!=null?p.energy.toFixed(1):"—")+'</span></div>'; }).join("");
+  return '<div class="shead"><h1>Processes</h1><span class="meta">showing '+Math.min(200,rows.length)+' of '+state.procs.length+'</span></div>'
+    +'<div class="toolbar"><div class="search"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg><input type="text" id="pd-search" placeholder="Search name, PID, command…  ( / )" value="'+esc(state.search)+'"></div>'
+      +'<button class="btn tg'+(state.devOnly?" on":"")+'" id="devTg">Dev tooling only</button>'
+      +(state.groupFilter?'<button class="btn tg on" id="grpClear">Group: '+esc(state.groupFilter)+' ✕</button>':'')
+      +'<div style="display:flex;align-items:center;gap:8px"><span class="lbl">Severity ≥</span><input type="range" min="10" max="100" value="'+state.threshold+'" id="thr" style="width:110px"><span class="mono crit" style="font-size:11px;width:30px">'+state.threshold+'%</span></div>'
+      +'<button class="btn" id="copySys">Copy report</button></div>'
+    +'<div class="card" style="padding:6px 6px">'+head+body+'</div>';
+}
+
+function rDetail(){
+  const d=state.detail;
+  if(!d) return '<div class="mut" style="padding:40px">Loading process '+route.pid+'…</div>';
+  if(d.error) return '<div class="shead"><h1>Process '+route.pid+'</h1></div><div class="card mut">Process is gone.</div>';
+  const live=state.procs.find(p=>p.pid===d.pid)||{}; const cpu=live.cpu??d.cpu; const i=d.interpretation||{};
+  const cards=[["CPU %",cpu.toFixed(1)+"%",sevOf(cpu)],["MEMORY",d.mem.toFixed(1)+"%",""],["THREADS",(d.threads??"—"),""],["ENERGY",(d.energy!=null?d.energy.toFixed(1):"—"),"warn"],["OPEN FDs",(d.fdCount??"—"),""]];
+  const ph=(PH[d.pid]||[]);
+  const chain=(d.chain||[]).map(n=>'<span class="chip" data-proc="'+n.pid+'">'+esc(n.name)+'</span>').join('<span class="mut" style="margin:0 2px">→</span>');
+  const kids=(d.children||[]).length?d.children.map(c=>'<div class="row" data-proc="'+c.pid+'"><span class="nm">'+esc(c.name)+'</span><span class="val mut">'+c.cpu.toFixed(1)+'%</span></div>').join(""):'<div class="rsub" style="padding:6px 4px">No child processes.</div>';
+  const ports=(d.ports||[]).length?d.ports.map(p=>{ const pm=(p.address||"").match(/:(\d+)$/); const port=pm?+pm[1]:0; const web=WEB_PORTS.has(port);
+    return '<span class="chip">'+esc(p.address)+(web?' <a class="acc" style="cursor:pointer" onclick="window.open(\'http://localhost:'+port+'\')">↗</a>':'')+'</span>'; }).join(""):'<span class="rsub">none</span>';
+  const prof=state.profileResult[d.pid];
+  const pkg = (i.scriptName&&i.resolvedScript)? '<div class="card" style="border-color:var(--acc);margin-bottom:10px"><div class="ctitle acc">INTERPRETED — nearest package.json</div><div class="mono" style="font-size:12px;background:var(--bg);padding:10px;border-radius:8px">"scripts": { "'+esc(i.scriptName)+'": "'+esc(i.resolvedScript)+'" }</div><div class="rsub" style="margin-top:6px">→ '+esc(i.label||"")+'</div></div>':'';
+  return '<button class="btn" style="margin-bottom:12px" onclick="location.hash=\'#/'+route.prev+'\'">← back to '+route.prev+'</button>'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><span class="dot7" style="background:'+sevHex(cpu)+';box-shadow:0 0 6px '+sevHex(cpu)+'"></span><h1 style="margin:0;font:700 20px var(--sans)">'+esc(d.name)+(live.isDev?' <span class="pill">DEV</span>':'')+'</h1><span class="meta mono mut">'+esc(i.label||"")+' · pid '+d.pid+' · ppid '+d.ppid+'</span></div>'
+    +'<div class="grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:10px">'+cards.map(c=>'<div class="tile"><div class="lbl">'+c[0]+'</div><span class="big '+c[2]+'" style="font-size:20px">'+c[1]+'</span></div>').join("")+'</div>'
+    +'<div class="grid" style="grid-template-columns:1.3fr 1fr;margin-bottom:10px">'
+      +'<div class="card"><div class="ctitle">IDENTITY</div><div class="kv"><span class="k">User</span><span class="v">'+esc(d.user)+'</span><span class="k">Elapsed</span><span class="v">'+fmtElapsed(d.elapsedSeconds)+'</span><span class="k">Exec</span><span class="v">'+esc(d.execPath||"unknown")+'</span><span class="k">Cwd</span><span class="v">'+esc(d.cwd||"unknown")+'</span><span class="k">Command</span><span class="v acc">'+esc(d.command||"unknown")+'</span></div></div>'
+      +'<div class="card"><div class="ctitle">CPU WHILE IN VIEW<span class="note">accumulates while open + recording</span></div>'+timeline(ph,[{get:s=>s.v,color:"var(--acc)",area:true}],{id:"det",h:150,max:100})+'</div>'
+    +'</div>'
+    +'<div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:10px">'
+      +'<div class="card"><div class="ctitle">PARENT CHAIN</div><div class="chips" style="margin-bottom:12px">'+chain+'</div><div class="ctitle">CHILD PROCESSES</div>'+kids+'</div>'
+      +'<div class="card"><div class="ctitle">LISTENING PORTS</div><div class="chips" style="margin-bottom:12px">'+ports+'</div><div class="ctitle">OPEN FILES &amp; SOCKETS</div><div class="rsub" style="padding:4px">'+(d.fdCount!=null?(d.fdCount+" open descriptors"):"unknown")+'</div>'
+      +((()=>{
+        const ranked=d.openFilesRanked&&d.openFilesRanked.length?d.openFilesRanked:d.openFiles&&d.openFiles.length?d.openFiles.map(f=>({path:f.path,type:f.type,notable:false,cls:'neutral'})):null;
+        if(!ranked||!ranked.length) return '';
+        return '<div style="margin-top:8px">'+(ranked.slice(0,8).map(f=>'<div class="rsub" style="padding:2px 0;word-break:break-all"><span class="mut" style="font-size:10px;margin-right:4px">['+f.type+']</span>'+esc(f.path)+(f.notable?'<span style="font:600 9px var(--mono);padding:1px 5px;border-radius:4px;background:var(--calm);color:#000;margin-left:6px;vertical-align:middle">notable</span>':f.cls==='signal'?'<span style="font:600 9px var(--mono);color:var(--calm);margin-left:5px">▲</span>':f.cls==='noise'?'<span style="font:600 9px var(--mono);color:var(--mut);margin-left:5px">▾</span>':'')+'</div>').join(""))+'</div>';
+      })())
+      +'</div>'
+    +'</div>'
+    // System process hint card
+    +(d.sysHint?'<div class="card" style="border-color:var(--acc);margin-bottom:10px"><div class="ctitle acc">SYSTEM PROCESS — '+esc(d.sysHint.label)+'</div><div class="rsub" style="line-height:1.5">'+esc(d.sysHint.what)+'</div>'+(d.sysHint.lookWhere?'<div class="rsub" style="margin-top:6px"><span class="mut">Look in: </span>'+esc(d.sysHint.lookWhere)+'</div>':'')+
+      // Crash handler callout: name the probable culprit
+      (d.sysHint.isCrashHandler&&d.recentCrashes&&d.recentCrashes.length?'<div style="margin-top:10px;padding:8px 10px;background:var(--bg);border-radius:8px;border:1px solid var(--warn)"><span class="warn" style="font:600 12px var(--sans)">'+esc(d.name)+' is a symptom — the likely cause is <strong>'+esc(d.recentCrashes[0].process)+'</strong> ('+d.recentCrashes[0].count+' crash'+(d.recentCrashes[0].count>1?'es':'')+' in the last hour)</span></div>':'')
+      +'</div>':'')
+    // Containers card — only for container-runtime processes
+    +(d.docker?(()=>{
+      const dk=d.docker;
+      let inner='';
+      if(!dk.available){
+        inner='<div class="rsub" style="padding:4px 0"><span class="mut">'+esc(dk.note||"docker unavailable")+'</span></div>';
+      } else {
+        inner+='<div class="kv" style="margin-bottom:10px">'
+          +'<span class="k">Running</span><span class="v acc" style="font:600 14px var(--mono)">'+dk.totalRunning+'</span>'
+          +'<span class="k">Churn (&lt;30s)</span><span class="v '+(dk.recentlyStarted>=5?"warn":"")+'">'+dk.recentlyStarted+'</span>'
+          +'<span class="k">Testcontainers</span><span class="v">'+dk.testcontainers+'</span>'
+          +'</div>';
+        if(dk.byImage&&dk.byImage.length){
+          inner+='<div class="ctitle" style="margin-bottom:6px">BY IMAGE</div>';
+          inner+=dk.byImage.map(b=>'<div class="row" style="cursor:default"><span class="nm mono" style="font-size:11px">'+esc(b.image)+'</span><span class="val mut">×'+b.count+'</span></div>').join('');
+        }
+      }
+      // Per-container CPU on-demand button
+      const dcr=state.dockerResult; const dcm=state.dockerMeasuring;
+      let statsPanel='';
+      if(dcm){
+        statsPanel='<div class="rsub" style="padding:8px 0"><span class="mut">Running docker stats…</span></div>';
+      } else if(dcr&&dcr.available&&dcr.topByCpu&&dcr.topByCpu.length){
+        statsPanel='<div class="ctitle" style="margin-top:10px">TOP BY CPU (docker stats)</div>'
+          +dcr.topByCpu.slice(0,12).map(t=>'<div class="row" style="cursor:default"><span class="nm mono" style="font-size:11px">'+esc(t.name)+'</span><span class="val warn">'+t.cpuPct.toFixed(2)+'%</span><span class="rsub" style="margin-left:8px">'+esc(t.memUsage)+'</span></div>').join('');
+      } else if(dcr&&!dcr.available){
+        statsPanel='<div class="rsub" style="padding:4px 0"><span class="mut">'+esc(dcr.note||"unavailable")+'</span></div>';
+      } else {
+        statsPanel='<div class="rsub" style="padding:4px 0">Click to fetch per-container CPU (~2s).</div>';
+      }
+      return '<div class="card" style="border-color:var(--calm);margin-bottom:10px"><div class="ctitle calm">CONTAINERS (OrbStack/Docker)</div>'
+        +inner
+        +statsPanel
+        +'<div style="margin-top:8px"><button class="btn" id="dockerStatsBtn"'+(dcm?' disabled':'')+'>⚙ Per-container CPU (docker stats)</button></div>'
+        +'</div>';
+    })():'')
+    // Recent crashes card
+    +(d.recentCrashes&&d.recentCrashes.length?'<div class="card" style="margin-bottom:10px"><div class="ctitle">RECENT CRASHES (last hour)</div>'
+      +d.recentCrashes.slice(0,8).map(c=>{
+        const ago=c.lastAt?fmtAgo(c.lastAt):"";
+        const loop=c.looping?'<span style="font:700 9px var(--mono);padding:1px 5px;border-radius:4px;background:var(--crit);color:#fff;margin-left:6px">LOOPING</span>':'';
+        return '<div class="row"><span class="nm">'+esc(c.process)+loop+'</span><span class="val crit" style="white-space:nowrap">'+c.count+'× · '+esc(ago)+'</span></div>';
+      }).join("")
+      +'</div>':'')
+    +pkg
+    // "📜 Process log" card — on-demand log tail
+    +(()=>{
+      const lr=state.logResult; const lm=state.logMeasuring;
+      let logPanel='';
+      if(lm){
+        logPanel='<div class="rsub" style="padding:8px 0"><span class="mut">Fetching process log…</span></div>';
+      } else if(lr&&lr.available){
+        logPanel='<div style="margin-bottom:8px"><span class="acc" style="font:600 13px var(--sans)">'+lr.totalLines+' log entries in '+lr.windowMinutes+'m · <span class="'+(lr.errorCount>0?'crit':'mut')+'">'+lr.errorCount+' error/fault</span></span></div>';
+        if(lr.topPatterns&&lr.topPatterns.length){
+          logPanel+='<div class="ctitle" style="margin-bottom:6px">TOP REPEATED MESSAGES</div>';
+          logPanel+=lr.topPatterns.slice(0,8).map(p=>'<div class="rsub" style="padding:3px 0;word-break:break-all"><span class="mono warn" style="font-size:10px;margin-right:6px">'+p.count+'×</span>'+(p.subsystem?'<span class="mut" style="font-size:10px;margin-right:4px">'+esc(p.subsystem)+'</span>':'')+' <span class="mono" style="font-size:10.5px">'+esc(p.sample.slice(0,160))+'</span></div>').join('');
+        }
+        if(lr.bySubsystem&&lr.bySubsystem.length){
+          logPanel+='<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:5px">'+lr.bySubsystem.slice(0,8).map(s=>'<span class="chipbadge" style="font-size:10px">'+esc(s.subsystem)+' ×'+s.count+'</span>').join('')+'</div>';
+        }
+        if(lr.note) logPanel+='<div class="rsub mut" style="margin-top:6px;font-size:10.5px">'+esc(lr.note)+'</div>';
+      } else if(lr&&!lr.available){
+        logPanel='<div class="rsub" style="padding:4px 0"><span class="mut">'+esc(lr.note||"unavailable")+'</span></div>';
+      } else {
+        logPanel='<div class="rsub" style="padding:4px 0">Click to fetch the last 3 minutes of unified log entries for this process (~1s).</div>';
+      }
+      return '<div class="card" style="margin-bottom:10px"><div class="ctitle">📜 PROCESS LOG</div>'
+        +logPanel
+        +'<div style="margin-top:8px"><button class="btn" id="logBtn"'+(lm?' disabled':'')+'>📜 Process log (last 3m)</button></div>'
+        +'</div>';
+    })()
+    // "🌊 Filesystem churn" card — on-demand elevated fs_usage attribution
+    +(()=>{
+      const fcr=state.fsChurnResult; const fcm=state.fsChurnMeasuring;
+      const isFsSym=!!(d.sysHint&&d.sysHint.isFsSymptom);
+      let churnPanel='';
+      if(fcm){
+        churnPanel='<div class="rsub" style="padding:8px 0"><span class="mut">requesting admin… sampling filesystem…</span></div>';
+      } else if(fcr&&fcr.available&&fcr.topProcesses&&fcr.topProcesses.length){
+        churnPanel='<div style="margin-bottom:8px"><span class="acc" style="font:600 13px var(--sans)">'+fcr.totalEvents+' fs events in '+fcr.windowSeconds+'s</span></div>';
+        churnPanel+=fcr.topProcesses.slice(0,8).map(p=>'<div class="row" style="cursor:default"><span class="nm mono" style="font-size:11px">'+esc(p.process)+'</span><span class="val warn">×'+p.count+'</span>'+(p.commonDir?'<span class="rsub mut" style="margin-left:8px;font-size:10.5px">under '+esc(p.commonDir)+'</span>':'')+'</div>'+(p.samplePaths&&p.samplePaths.length?'<div class="rsub" style="padding:2px 8px;font-size:10.5px"><span class="mono mut">'+esc(p.samplePaths[0])+'</span></div>':'')).join('');
+        if(fcr.note) churnPanel+='<div class="rsub" style="margin-top:6px;font-size:10.5px">'+esc(fcr.note)+'</div>';
+        if(fcr.truncated) churnPanel+='<div class="rsub warn" style="font-size:10.5px">(truncated — output exceeded 4 MB cap)</div>';
+        if(isFsSym) churnPanel+='<div style="margin-top:8px;padding:8px 10px;background:var(--bg);border-radius:8px;border:1px solid var(--warn)"><span class="warn" style="font:600 12px var(--sans)">→ This daemon is a symptom — the process above is generating the file-event flood.</span></div>';
+      } else if(fcr&&!fcr.available){
+        churnPanel='<div class="rsub" style="padding:4px 0"><span class="mut">'+esc(fcr.note||"unavailable")+'</span></div>';
+      } else {
+        churnPanel='<div class="rsub" style="padding:4px 0">'+(isFsSym?'<span class="warn" style="font:600 12px var(--sans)">This daemon is a filesystem-churn symptom.</span> ':'')+'Click to run <span class="mono">fs_usage</span> for 3s as root and name the process driving the change storm.</div>';
+      }
+      const btnStyle=isFsSym&&!fcr?'class="btn amber" style="border-color:var(--warn)"':'class="btn"';
+      return '<div class="card" style="margin-bottom:10px'+(isFsSym&&!fcr?';border-color:var(--warn)':'')+'">'
+        +'<div class="ctitle'+(isFsSym?' warn':'')+'">🌊 FILESYSTEM CHURN</div>'
+        +churnPanel
+        +'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button '+btnStyle+' id="fsChurnBtn"'+(fcm?' disabled':'')+'>🌊 Filesystem churn (admin)</button>'
+        +'<button class="btn" id="readDeltaBtn"'+(state.readMeasuring?' disabled':'')+'>📖 Read activity (3s)</button></div>'
+        +(()=>{
+          const rr=state.readResult, rm2=state.readMeasuring;
+          if(rm2) return '<div class="rsub" style="padding:8px 0"><span class="mut">taking two lsof snapshots…</span></div>';
+          if(rr&&rr.available){
+            return '<div style="margin-top:8px"><span class="acc" style="font:600 13px var(--sans)">'+esc(rr.verdict)+'</span></div>'
+              +'<div class="rsub mono" style="font-size:11px;margin-top:4px">fds: '+rr.fdsBefore+' → '+rr.fdsAfter+'   (+'+rr.fdsAdded+' new, -'+rr.fdsRemoved+' closed, '+rr.offsetsAdvanced+' offsets advanced)</div>'
+              +(rr.commonDir?'<div class="rsub mut" style="font-size:10.5px;margin-top:2px">under '+esc(rr.commonDir)+'</div>':'');
+          }
+          if(rr&&!rr.available) return '<div class="rsub" style="padding:4px 0;margin-top:4px"><span class="mut">'+esc(rr.note||"unavailable")+'</span></div>';
+          return '';
+        })()
+        +'</div>';
+    })()
+    // "What is it doing?" card with Sample stack button
+    +'<div class="card" style="margin-bottom:10px"><div class="ctitle">WHAT IS IT DOING?</div>'
+      +(state.sampling?'<div class="rsub" style="padding:8px 0"><span class="mut">Sampling for 2s…</span></div>'
+        :state.sampleResult&&state.sampleResult.available?
+          '<div style="margin-bottom:8px"><span class="'+(state.sampleResult.cpuBound?'warn':'mut')+'" style="font:600 13px var(--sans)">'+esc(state.sampleResult.verdict||"")+'</span></div>'
+          +'<div style="margin-bottom:6px">'+(state.sampleResult.topFrames.slice().reverse().map((f,idx)=>'<div class="rsub" style="padding:2px 0;padding-left:'+(idx*10)+'px"><span class="mono" style="font-size:11px">'+esc(f.symbol)+'</span>'+(f.binary?'<span class="mut" style="font-size:10px;margin-left:4px">in '+esc(f.binary)+'</span>':'')+'</div>').join(""))+'</div>'
+          +(state.sampleResult.raw?'<details style="margin-top:4px"><summary class="rsub" style="cursor:pointer">Raw sample output</summary><pre class="mono" style="font-size:10px;background:var(--bg);padding:8px;border-radius:6px;overflow:auto;max-height:200px">'+esc(state.sampleResult.raw.slice(0,2000))+'</pre></details>':'')
+        :state.sampleResult&&!state.sampleResult.available?
+          '<div class="rsub" style="padding:4px 0"><span class="mut">'+esc(state.sampleResult.note||"unavailable")+'</span></div>'
+          // Show the "Sample with admin rights" button when note indicates a privilege problem
+          +((/privilege|elevated|administrator|not permitted|appropriate privileges/i).test(state.sampleResult.note||"")?
+            '<div style="margin-top:10px;padding:10px 12px;background:var(--bg);border-radius:8px;border:1px solid var(--bd)">'
+            +'<button class="btn" id="sampleElevBtn" style="margin-bottom:6px">🔓 Sample with admin rights</button>'
+            +'<div class="rsub mut" style="font-size:11px">macOS will ask for your password; runs <span class="mono">sample</span> as root just for this.</div>'
+            +'</div>':'')
+        :'<div class="rsub" style="padding:4px 0">Click to capture a 2-second stack sample of this process.</div>')
+      +'<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="sampleBtn"'+(state.sampling?' disabled':'')+'>Sample stack (2s)</button></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:9px;flex-wrap:wrap"><button class="btn acc" id="copyRep">Copy diagnostic report</button><button class="btn" id="copyPr">Copy AI investigation prompt</button><button class="btn amber" id="prof">Profile this process for 10s</button>'
+      +(state.profiling&&state.profiling.pid===d.pid?'<span class="mono warn" style="align-self:center">profiling… '+state.profiling.samples.length+' samples</span>':prof?'<span class="mono mut" style="align-self:center">peak '+prof.peak.toFixed(0)+'% · avg '+prof.avg.toFixed(0)+'% · '+prof.n+' samples</span>':'')+'</div>'
+    +'<div id="aiOut" style="margin-top:12px"></div>';
+}
+
+// ---------- view bindings (post-render) ----------
+function bindAfter(){
+  if(route.section==="processes"){
+    const si=$("pd-search"); if(si){ si.oninput=()=>{ state.search=si.value; if(si.value)state.groupFilter=null; render(); si2focus(); }; }
+    $("view").querySelectorAll("[data-sort]").forEach(b=>b.onclick=()=>{ if(state.sortKey===b.dataset.sort)state.sortDir*=-1; else{state.sortKey=b.dataset.sort; state.sortDir=b.dataset.sort==="name"?1:-1;} render(); });
+    const dt=$("devTg"); if(dt)dt.onclick=()=>{ state.devOnly=!state.devOnly; render(); };
+    const gc=$("grpClear"); if(gc)gc.onclick=()=>{ state.groupFilter=null; render(); };
+    const th=$("thr"); if(th)th.oninput=()=>{ state.threshold=+th.value; render(); };
+    const cs=$("copySys"); if(cs)cs.onclick=()=>{ navigator.clipboard.writeText(systemReport()).then(()=>toast("System report copied")); };
+  }
+  if(route.section==="energy"){
+    const pb=$("powerBtn"); if(pb)pb.onclick=async()=>{
+      state.powerMeasuring=true; render();
+      try{
+        const r=await fetchJSON("/api/powermetrics",{method:"POST"});
+        state.powerResult=r||null;
+      }catch(e){ state.powerResult={available:false,note:"Request failed",topCpu:[],topGpu:[],gpuActiveResidencyPct:null,gpuPowerMw:null}; }
+      state.powerMeasuring=false; render();
+    };
+  }
+  if(route.section==="proc" && state.detail && !state.detail.error){
+    const d=state.detail;
+    // Report/prompt buttons use the deep version (with stack sample) when available
+    const deepDetail = state._deepDetail || d;
+    const cr=$("copyRep"); if(cr)cr.onclick=()=>navigator.clipboard.writeText(deepDetail.report||"").then(()=>toast("Report copied"));
+    const cp=$("copyPr"); if(cp)cp.onclick=()=>navigator.clipboard.writeText(deepDetail.prompt||"").then(()=>toast("Prompt copied — paste into your agent"));
+    const pf=$("prof"); if(pf)pf.onclick=()=>{ state.profiling={pid:d.pid,until:Date.now()+10000,samples:[]}; toast("Profiling for 10s…"); render(); };
+    const sb=$("sampleBtn"); if(sb)sb.onclick=async()=>{
+      state.sampling=true; state.sampleResult=null; render();
+      try{
+        const r=await fetchJSON("/api/sample/"+d.pid,{method:"POST"});
+        state.sampleResult=r.sample||null;
+        // Store the deep detail so Copy report/prompt use the enriched version
+        if(r.detail) state._deepDetail=r.detail;
+      }catch(e){ state.sampleResult={available:false,note:"Request failed",cpuBound:null,verdict:null,topFrames:[],threadCount:0}; }
+      state.sampling=false; render();
+    };
+    // Process log button
+    const lb=$("logBtn"); if(lb)lb.onclick=async()=>{
+      if(state.logMeasuring) return;
+      state.logMeasuring=true; state.logResult=null; render();
+      try{
+        const r=await fetchJSON("/api/log/"+d.pid+"?minutes=3",{method:"POST"});
+        state.logResult=r.logTail||null;
+        if(r.detail) state._deepDetail=r.detail;
+      }catch(e){ state.logResult={available:false,note:"Request failed",pid:d.pid,windowMinutes:3,totalLines:0,topPatterns:[],bySubsystem:[],errorCount:0,privateRedacted:0}; }
+      state.logMeasuring=false; render();
+    };
+    // Docker stats button — only rendered when detail.docker is present
+    const db=$("dockerStatsBtn"); if(db)db.onclick=async()=>{
+      state.dockerMeasuring=true; state.dockerResult=null; render();
+      try{
+        const r=await fetchJSON("/api/docker",{method:"POST"});
+        state.dockerResult=r||null;
+      }catch(e){ state.dockerResult={available:false,note:"Request failed",topByCpu:[]}; }
+      state.dockerMeasuring=false; render();
+    };
+    // Filesystem churn button — always rendered in the proc detail panel
+    const fb=$("fsChurnBtn"); if(fb)fb.onclick=async()=>{
+      if(state.fsChurnMeasuring) return;
+      state.fsChurnMeasuring=true; state.fsChurnResult=null; render();
+      try{
+        const r=await fetchJSON("/api/fschurn/"+d.pid+"?seconds=3",{method:"POST"});
+        state.fsChurnResult=r.fsChurn||null;
+        if(r.detail) state._deepDetail=r.detail;
+      }catch(e){ state.fsChurnResult={available:false,note:"Request failed",windowSeconds:3,totalEvents:0,topProcesses:[],truncated:false}; }
+      state.fsChurnMeasuring=false; render();
+    };
+    // Read-activity button — two no-sudo lsof -o snapshots, 1500ms apart
+    const rb=$("readDeltaBtn"); if(rb)rb.onclick=async()=>{
+      if(state.readMeasuring) return;
+      state.readMeasuring=true; state.readResult=null; render();
+      try{
+        const r=await fetchJSON("/api/readdelta/"+d.pid+"?gap=1500",{method:"POST"});
+        state.readResult=r.readActivity||null;
+        if(r.detail) state._deepDetail=r.detail;
+      }catch(e){ state.readResult={available:false,note:"Request failed",gapMs:1500,fdsBefore:0,fdsAfter:0,fdsAdded:0,fdsRemoved:0,offsetsAdvanced:0,sampleAdded:[],commonDir:null,verdict:"unknown"}; }
+      state.readMeasuring=false; render();
+    };
+    // Elevated sample button — only rendered when normal sample hit a privilege error
+    const eb=$("sampleElevBtn"); if(eb)eb.onclick=async()=>{
+      state.sampling=true; render();
+      try{
+        const r=await fetchJSON("/api/sample/"+d.pid+"?elevated=1",{method:"POST"});
+        state.sampleResult=r.sample||null;
+        if(r.detail) state._deepDetail=r.detail;
+      }catch(e){ state.sampleResult={available:false,note:"Elevated request failed",cpuBound:null,verdict:null,topFrames:[],threadCount:0}; }
+      state.sampling=false; render();
+    };
+  }
+}
+let _focusSearch=false;
+function si2focus(){ const si=$("pd-search"); if(si){ si.focus(); si.setSelectionRange(si.value.length,si.value.length); } }
+const _origRender=render;
+render=function(){ _origRender(); bindAfter(); };
+
+function systemReport(){ const s=state.sys; if(!s)return ""; return "Process Detective — system report\n"+s.host.chip+" / "+s.host.model+"\nCPU "+s.cpu.usagePct.toFixed(0)+"% (load "+s.cpu.loadAvg.join(", ")+")\nMemory "+fmtBytes(s.memory.usedBytes)+"/"+fmtBytes(s.memory.totalBytes)+" ("+s.memory.usedPct.toFixed(0)+"%, pressure "+s.memory.pressure+")\nSwap "+fmtBytes(s.memory.swap.usedBytes)+"\nNetwork ↓"+fmtRate(s.network.rxBytesPerSec)+" ↑"+fmtRate(s.network.txBytesPerSec)+", "+s.network.connections.established+" established, "+s.network.connections.listen+" listening\nDisk ↓"+fmtRate(s.disk.readBytesPerSec)+" ↑"+fmtRate(s.disk.writeBytesPerSec)+"\nProcesses "+s.processes.total+", threads "+s.processes.threads+"\nTop CPU: "+topByCpu(5).map(p=>p.name+" "+p.cpu.toFixed(0)+"%").join(", "); }
+
+// ---------- AI advice ----------
+async function getAdvice(pid){ const el=$("aiOut"); if(el)el.innerHTML='<div class="card mut">Analyzing with Claude…</div>';
+  try{ const d=await fetchJSON("/api/advice/"+pid,{method:"POST"}); if(el)el.innerHTML='<div class="card">'+(d.error?'<span class="crit">'+esc(d.error)+'</span>':esc(d.advice).replace(/\n/g,"<br>"))+'</div>'; }catch(e){} }
+
+// ---------- keyboard ----------
+let gPending=false, gTimer=null;
+document.addEventListener("keydown",(e)=>{
+  const inInput = /input|textarea/i.test(document.activeElement.tagName);
+  if(e.key==="Escape"){ if(inInput){document.activeElement.blur();} else if(route.section==="proc"){location.hash="#/"+route.prev;} return; }
+  if(inInput) return;
+  if(e.key==="/"){ e.preventDefault(); if(route.section!=="processes")go("processes"); setTimeout(si2focus,30); return; }
+  if(e.key===" "){ e.preventDefault(); setPaused(!state.paused); return; }
+  if(gPending){ gPending=false; clearTimeout(gTimer); const s=SECTIONS.find(x=>x.key===e.key.toLowerCase()); if(s){go(s.id);return;} }
+  if(e.key==="g"){ gPending=true; gTimer=setTimeout(()=>gPending=false,850); return; }
+  if(/^[1-7]$/.test(e.key)){ go(SECTIONS[+e.key-1].id); return; }
+  if(route.section==="processes" && state._rows){ const n=Math.min(200,state._rows.length);
+    if(e.key==="ArrowDown"){ state.sel=clamp(state.sel+1,0,n-1); render(); scrollSel(); }
+    if(e.key==="ArrowUp"){ state.sel=clamp(state.sel-1,0,n-1); render(); scrollSel(); }
+    if(e.key==="Enter" && state._rows[state.sel]){ openProc(state._rows[state.sel].pid); }
+  }
+});
+function scrollSel(){ const r=$("view").querySelectorAll(".tbl-r")[state.sel]; if(r)r.scrollIntoView({block:"nearest"}); }
+
+// ---------- header controls ----------
+$("collapse").onclick=()=>{ state.collapsed=!state.collapsed; $("nav").classList.toggle("col",state.collapsed); };
+$("theme").onclick=()=>{ state.theme=state.theme==="dark"?"light":"dark"; document.body.dataset.theme=state.theme; };
+$("intvl").onclick=()=>{ state.intervalIdx=(state.intervalIdx+1)%INTERVALS.length; $("intvl").textContent=INTERVALS[state.intervalIdx]/1000+"s"; reschedule(); };
+$("recPill").onclick=()=>{ setPaused(!state.paused); };
+$("rangeSel").querySelectorAll("button").forEach(b=>b.onclick=()=>setRange(b.dataset.range));
+
+// ---------- lifecycle ----------
+document.addEventListener("visibilitychange", ()=>{ updateStatus(); if(visible()) render(); reschedule(); });
+setInterval(()=>{ $("clock").textContent=new Date().toLocaleTimeString(); },1000);
+window.addEventListener("hashchange",onRoute);
+
+renderNav();
+updateStatus();
+onRoute();
+tick(); // kicks off the self-scheduling collection loop
+</script>
+</body>
+</html>

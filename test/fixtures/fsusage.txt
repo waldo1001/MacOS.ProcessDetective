@@ -1,0 +1,35 @@
+12:34:56.789  open              F=3    /Users/waldo/proj/node_modules/.cache/babel-loader/a1b2c3.json  0.000123 W node.12345
+12:34:56.790  WrData[async]    B=4096 /Users/waldo/proj/node_modules/.cache/babel-loader/d4e5f6.json  0.000045   node.12345
+12:34:56.791  open              F=4    /Users/waldo/proj/node_modules/.cache/babel-loader/g7h8i9.json  0.000088 W node.12345
+12:34:56.792  WrData[async]    B=8192 /Users/waldo/proj/node_modules/webpack/lib/Compiler.js  0.000031   node.12345
+12:34:56.793  open              F=5    /Users/waldo/proj/node_modules/.cache/default-development/0.pack  0.000210 W node.12345
+12:34:56.794  WrData[async]    B=4096 /Users/waldo/proj/node_modules/.cache/default-development/1.pack  0.000019   node.12345
+12:34:56.795  open              F=6    /Users/waldo/proj/node_modules/.cache/babel-loader/j1k2l3.json  0.000066 W node.12345
+12:34:56.796  WrData[async]    B=4096 /Users/waldo/proj/node_modules/.cache/babel-loader/m4n5o6.json  0.000028   node.12345
+12:34:56.797  open              F=7    /Users/waldo/proj/node_modules/.cache/babel-loader/p7q8r9.json  0.000072 W node.12345
+12:34:56.798  WrData[async]    B=4096 /Users/waldo/proj/node_modules/.cache/default-development/2.pack  0.000033   node.12345
+12:34:56.799  getattrlist            /Users/waldo/proj/node_modules/.cache/babel-loader/s1t2u3.json  0.000011   node.12345
+12:34:56.800  stat64                 /Users/waldo/proj/node_modules/webpack/lib/Stats.js  0.000009   node.12345
+12:34:56.801  open              F=8   /Users/waldo/proj/node_modules/.cache/babel-loader/v4w5x6.json  0.000055 W node.12345
+12:34:56.802  WrData[async]    B=4096 /Users/waldo/proj/node_modules/.cache/babel-loader/y7z8a1.json  0.000041   node.12345
+12:34:56.803  open              F=9   /Users/waldo/proj/node_modules/.cache/default-development/3.pack  0.000099 W node.12345
+12:34:56.804  stat64                 /Users/waldo/proj/node_modules/webpack/lib/NormalModule.js  0.000007   node.12345
+12:34:56.805  open              F=10  /Users/waldo/proj/node_modules/.cache/babel-loader/b2c3d4.json  0.000061 W node.12345
+12:34:56.806  WrData[async]    B=4096 /Users/waldo/proj/node_modules/.cache/babel-loader/e5f6g7.json  0.000037   node.12345
+12:34:56.807  open              F=11  /Users/waldo/proj/node_modules/.cache/default-development/4.pack  0.000078 W node.12345
+12:34:56.808  stat64                 /Users/waldo/proj/node_modules/webpack/lib/WebpackOptionsApply.js  0.000005   node.12345
+12:34:57.100  WrData[async]    B=4096 /private/var/db/mds/messages/se/mds.dbspot  0.000052   mds_stores.678
+12:34:57.101  stat64                 /Users/waldo/proj/src/components/Button.tsx  0.000014   mds_stores.678
+12:34:57.102  WrData[async]    B=8192 /private/var/db/mds/messages/se/mdsdir.db  0.000069   mds_stores.678
+12:34:57.103  getattrlist            /Users/waldo/proj/src/index.ts  0.000008   mds_stores.678
+12:34:57.104  WrData[async]    B=4096 /private/var/db/mds/messages/se/mdsspot.db  0.000043   mds_stores.678
+12:34:57.200  stat64                 /Users/waldo/proj/build/out/main.js  0.000011   Xcode.99101
+12:34:57.201  stat64                 /Users/waldo/proj/build/out/vendor.js  0.000013   Xcode.99101
+12:34:57.202  open              F=2   /Users/waldo/proj/build/out/main.js.map  0.000041 W Xcode.99101
+12:34:57.300  getattrlist            /dev/null  0.000003   fseventsd.222
+12:34:57.301  stat64                 /private/var/db/fseventsd/fseventsd-uuid  0.000006   fseventsd.222
+12:34:57.400  stat64                 /tmp/pd_fsusage.XXXXXX  0.000004   fs_usage.333
+12:34:57.401  open              F=1   /tmp/pd_fsusage.XXXXXX  0.000012   fs_usage.333
+12:34:57.500  stat64                 /bin/sh  0.000002   sh.444
+12:34:57.600  stat64                 /bin/sh  0.000003   osascript.555
+12:34:57.700  stat64                 /private/tmp  0.000004   mktemp.666

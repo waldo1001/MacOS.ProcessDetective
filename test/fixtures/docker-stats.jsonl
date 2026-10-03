@@ -1,0 +1,9 @@
+{"BlockIO":"0B / 0B","CPUPerc":"13.12%","Container":"ce9f7a003f0c","ID":"ce9f7a003f0c","MemPerc":"0.13%","MemUsage":"21.05MiB / 15.66GiB","Name":"hardcore_galois","NetIO":"1.2kB / 0B","PIDs":"7"}
+{"BlockIO":"0B / 0B","CPUPerc":"0.42%","Container":"a8c79a49c946","ID":"a8c79a49c946","MemPerc":"0.11%","MemUsage":"17.88MiB / 15.66GiB","Name":"boring_hofstadter","NetIO":"0B / 0B","PIDs":"6"}
+{"BlockIO":"0B / 0B","CPUPerc":"0.18%","Container":"49bbd00825d7","ID":"49bbd00825d7","MemPerc":"0.10%","MemUsage":"16.44MiB / 15.66GiB","Name":"serene_chatelet","NetIO":"0B / 0B","PIDs":"6"}
+{"BlockIO":"0B / 0B","CPUPerc":"0.05%","Container":"c4212b14bae9","ID":"c4212b14bae9","MemPerc":"0.09%","MemUsage":"14.99MiB / 15.66GiB","Name":"thirsty_archimedes","NetIO":"0B / 0B","PIDs":"6"}
+{"BlockIO":"0B / 0B","CPUPerc":"0.03%","Container":"f0b5bd0d1c0f","ID":"f0b5bd0d1c0f","MemPerc":"0.09%","MemUsage":"14.77MiB / 15.66GiB","Name":"naughty_wozniak","NetIO":"0B / 0B","PIDs":"6"}
+{"BlockIO":"0B / 0B","CPUPerc":"0.01%","Container":"964ddcaef87b","ID":"964ddcaef87b","MemPerc":"0.08%","MemUsage":"13.21MiB / 15.66GiB","Name":"hardcore_goldwasser","NetIO":"0B / 0B","PIDs":"6"}
+{"BlockIO":"0B / 0B","CPUPerc":"0.02%","Container":"e6f61881a97a","ID":"e6f61881a97a","MemPerc":"0.02%","MemUsage":"2.82MiB / 15.66GiB","Name":"testcontainers-ryuk-7ccf979d","NetIO":"22.8kB / 486B","PIDs":"9"}
+{"BlockIO":"0B / 0B","CPUPerc":"0.00%","Container":"cb28c1312d50","ID":"cb28c1312d50","MemPerc":"0.02%","MemUsage":"2.46MiB / 15.66GiB","Name":"testcontainers-ryuk-608051a1","NetIO":"29.1kB / 552B","PIDs":"8"}
+{"BlockIO":"0B / 0B","CPUPerc":"0.00%","Container":"abcdef123456","ID":"abcdef123456","MemPerc":"0.03%","MemUsage":"5.10MiB / 15.66GiB","Name":"my_redis","NetIO":"0B / 0B","PIDs":"4"}
