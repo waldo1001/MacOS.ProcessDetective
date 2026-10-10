@@ -64,41 +64,36 @@ notarized zip and a `SHA256SUMS.txt`. The tag must equal `v` + the
 `package.json` version, otherwise the job stops before signing.
 
 ```bash
-npm version patch
-git push --follow-tags
+npm run ship              # patch; or: npm run ship -- minor
 ```
+
+`scripts/ship.sh` refuses a dirty or out-of-sync `main`, runs typecheck and tests,
+bumps the version, pushes the tag and follows the workflow until the release is up.
 
 A failed run can be retried for an existing tag from the Actions tab
 (*Release → Run workflow*, enter the tag); assets are replaced on the existing release.
 
-### One-time: repository secrets
+### One-time: secrets and variables on the `release` environment
 
-Put them on the `release` environment (Settings → Environments → `release`), so
-only the release job can read them. Add a required reviewer there if every
-release should wait for a click.
+Notarization in CI uses an **App Store Connect API key** (App Store Connect →
+Users and Access → Integrations → Team Keys, role *Developer*), not an Apple ID:
+it needs no 2FA, no app-specific password, and can be revoked on its own.
+Apple lets you download the `.p8` only once — keep it in a password manager.
 
-| Secret | Value |
-|---|---|
-| `DEVELOPER_ID_CERT_P12_BASE64` | the Developer ID Application certificate + private key, exported as `.p12`, base64-encoded |
-| `DEVELOPER_ID_CERT_PASSWORD` | the password chosen when exporting the `.p12` |
-| `NOTARY_APPLE_ID` | the Apple ID used for notarization |
-| `NOTARY_TEAM_ID` | the 10-character team ID |
-| `NOTARY_PASSWORD` | an app-specific password for that Apple ID |
+| Kind | Name | Value |
+|---|---|---|
+| secret | `DEVELOPER_ID_CERT_P12_BASE64` | the Developer ID Application identity (cert + key) as `.p12`, base64 |
+| secret | `DEVELOPER_ID_CERT_PASSWORD` | the `.p12` password |
+| secret | `NOTARY_API_KEY_P8` | the contents of `AuthKey_<KEYID>.p8` |
+| variable | `NOTARY_KEY_ID` | the key ID (in the file name) |
+| variable | `NOTARY_ISSUER_ID` | the issuer ID (UUID above the key list) |
 
-Export the certificate: Keychain Access → login → My Certificates → right-click
-*Developer ID Application: …* → Export → `.p12` (pick a strong password). Then:
+Export only the Developer ID identity (the login keychain also holds other
+identities that must not end up in CI) with `scripts/export-identity.swift`;
+macOS asks once to allow the private-key export.
 
-```bash
-base64 -i DeveloperID.p12 | gh secret set DEVELOPER_ID_CERT_P12_BASE64 --env release
-gh secret set DEVELOPER_ID_CERT_PASSWORD --env release
-gh secret set NOTARY_APPLE_ID --env release
-gh secret set NOTARY_TEAM_ID --env release
-gh secret set NOTARY_PASSWORD --env release
-```
-
-`gh secret set` without a value prompts for it, so nothing lands in shell history.
-Delete the `.p12` file afterwards. Locally `notarize.sh` still uses the keychain
-profile; it switches to the `NOTARY_*` variables only when all three are set.
+Locally `notarize.sh` still uses the keychain profile; it switches to the API key
+when `NOTARY_KEY_PATH`, `NOTARY_KEY_ID` and `NOTARY_ISSUER_ID` are all set.
 
 The runner is Apple Silicon, so the bundled Node runtime (and the release) is
 arm64-only, the same as a local release built on an M-series Mac.

@@ -68,10 +68,14 @@ jobs:
 
       - name: Build, sign, notarize, staple
         env:
-          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
-          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
-          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
-        run: bash scripts/notarize.sh
+          NOTARY_API_KEY_P8: ${{ secrets.NOTARY_API_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ vars.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ vars.NOTARY_ISSUER_ID }}
+        run: |
+          export NOTARY_KEY_PATH="$RUNNER_TEMP/notary-key.p8"
+          printf '%s\n' "$NOTARY_API_KEY_P8" > "$NOTARY_KEY_PATH"
+          chmod 600 "$NOTARY_KEY_PATH"
+          bash scripts/notarize.sh
 
       - name: Checksum
         run: |
@@ -97,6 +101,8 @@ jobs:
               --title "Process Detective ${TAG#v}" --generate-notes --verify-tag
           fi
 
-      - name: Remove signing keychain
+      - name: Remove signing material
         if: always()
-        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/notary-key.p8"

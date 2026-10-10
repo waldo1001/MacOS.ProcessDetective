@@ -38,8 +38,13 @@ if [ -z "$IDENTITY" ]; then
   exit 1
 fi
 # Credentials: the keychain profile locally; in CI the NOTARY_* environment
-# variables (app-specific password), so no profile has to be stored first.
-if [ -n "${NOTARY_APPLE_ID:-}" ] && [ -n "${NOTARY_TEAM_ID:-}" ] && [ -n "${NOTARY_PASSWORD:-}" ]; then
+# variables, so no profile has to be stored first. An App Store Connect API key
+# (NOTARY_KEY_PATH + NOTARY_KEY_ID + NOTARY_ISSUER_ID) wins over an Apple ID with
+# an app-specific password (NOTARY_APPLE_ID + NOTARY_TEAM_ID + NOTARY_PASSWORD).
+if [ -n "${NOTARY_KEY_PATH:-}" ] && [ -n "${NOTARY_KEY_ID:-}" ] && [ -n "${NOTARY_ISSUER_ID:-}" ]; then
+  AUTH=(--key "$NOTARY_KEY_PATH" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID")
+  AUTH_HINT="--key \$NOTARY_KEY_PATH --key-id \$NOTARY_KEY_ID --issuer \$NOTARY_ISSUER_ID"
+elif [ -n "${NOTARY_APPLE_ID:-}" ] && [ -n "${NOTARY_TEAM_ID:-}" ] && [ -n "${NOTARY_PASSWORD:-}" ]; then
   AUTH=(--apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD")
   AUTH_HINT="--apple-id \$NOTARY_APPLE_ID --team-id \$NOTARY_TEAM_ID --password \$NOTARY_PASSWORD"
 else
@@ -50,7 +55,7 @@ if ! xcrun notarytool history "${AUTH[@]}" >/dev/null 2>&1; then
   echo "error: notarytool credentials not found or not working ($AUTH_HINT)." >&2
   echo "  Store a profile once (interactive, asks for an app-specific password):" >&2
   echo "    xcrun notarytool store-credentials $PROFILE --apple-id <apple-id> --team-id <team-id>" >&2
-  echo "  or set NOTARY_APPLE_ID, NOTARY_TEAM_ID and NOTARY_PASSWORD." >&2
+  echo "  or set NOTARY_KEY_PATH, NOTARY_KEY_ID and NOTARY_ISSUER_ID (App Store Connect API key)." >&2
   exit 1
 fi
 

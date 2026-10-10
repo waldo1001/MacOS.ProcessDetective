@@ -24,7 +24,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "release": "bash scripts/notarize.sh"
+    "release": "bash scripts/notarize.sh",
+    "ship": "bash scripts/ship.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
