@@ -56,6 +56,61 @@ Options: `--identity="Developer ID Application: …"` to pick a certificate,
 `--profile=<name>` for another notarytool profile, `--no-build` to re-submit the
 existing bundle.
 
+## Releasing from GitHub Actions
+
+`.github/workflows/release.yml` runs the same `scripts/notarize.sh` on a macOS
+runner whenever a `v*` tag is pushed, then publishes a GitHub release with the
+notarized zip and a `SHA256SUMS.txt`. The tag must equal `v` + the
+`package.json` version, otherwise the job stops before signing.
+
+```bash
+npm version patch
+git push --follow-tags
+```
+
+A failed run can be retried for an existing tag from the Actions tab
+(*Release → Run workflow*, enter the tag); assets are replaced on the existing release.
+
+### One-time: repository secrets
+
+Put them on the `release` environment (Settings → Environments → `release`), so
+only the release job can read them. Add a required reviewer there if every
+release should wait for a click.
+
+| Secret | Value |
+|---|---|
+| `DEVELOPER_ID_CERT_P12_BASE64` | the Developer ID Application certificate + private key, exported as `.p12`, base64-encoded |
+| `DEVELOPER_ID_CERT_PASSWORD` | the password chosen when exporting the `.p12` |
+| `NOTARY_APPLE_ID` | the Apple ID used for notarization |
+| `NOTARY_TEAM_ID` | the 10-character team ID |
+| `NOTARY_PASSWORD` | an app-specific password for that Apple ID |
+
+Export the certificate: Keychain Access → login → My Certificates → right-click
+*Developer ID Application: …* → Export → `.p12` (pick a strong password). Then:
+
+```bash
+base64 -i DeveloperID.p12 | gh secret set DEVELOPER_ID_CERT_P12_BASE64 --env release
+gh secret set DEVELOPER_ID_CERT_PASSWORD --env release
+gh secret set NOTARY_APPLE_ID --env release
+gh secret set NOTARY_TEAM_ID --env release
+gh secret set NOTARY_PASSWORD --env release
+```
+
+`gh secret set` without a value prompts for it, so nothing lands in shell history.
+Delete the `.p12` file afterwards. Locally `notarize.sh` still uses the keychain
+profile; it switches to the `NOTARY_*` variables only when all three are set.
+
+The runner is Apple Silicon, so the bundled Node runtime (and the release) is
+arm64-only, the same as a local release built on an M-series Mac.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request:
+typecheck, the test suite, the full ad-hoc app build (bundle guard, `swiftc`,
+hardened-runtime signing) and a smoke run of the bundled Node. The ad-hoc zip is
+kept as a workflow artifact for 7 days. Dependabot proposes npm and Actions
+updates weekly.
+
 ## What the build does for notarization
 
 - Bundles the Node runtime as `Contents/MacOS/node` and installs production

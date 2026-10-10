@@ -37,10 +37,20 @@ if [ -z "$IDENTITY" ]; then
   echo "  Create one: Xcode → Settings → Accounts → (team) → Manage Certificates → + → Developer ID Application" >&2
   exit 1
 fi
-if ! xcrun notarytool history --keychain-profile "$PROFILE" >/dev/null 2>&1; then
-  echo "error: notarytool profile '$PROFILE' not found or not working." >&2
-  echo "  Store it once (interactive, asks for an app-specific password):" >&2
+# Credentials: the keychain profile locally; in CI the NOTARY_* environment
+# variables (app-specific password), so no profile has to be stored first.
+if [ -n "${NOTARY_APPLE_ID:-}" ] && [ -n "${NOTARY_TEAM_ID:-}" ] && [ -n "${NOTARY_PASSWORD:-}" ]; then
+  AUTH=(--apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD")
+  AUTH_HINT="--apple-id \$NOTARY_APPLE_ID --team-id \$NOTARY_TEAM_ID --password \$NOTARY_PASSWORD"
+else
+  AUTH=(--keychain-profile "$PROFILE")
+  AUTH_HINT="--keychain-profile $PROFILE"
+fi
+if ! xcrun notarytool history "${AUTH[@]}" >/dev/null 2>&1; then
+  echo "error: notarytool credentials not found or not working ($AUTH_HINT)." >&2
+  echo "  Store a profile once (interactive, asks for an app-specific password):" >&2
   echo "    xcrun notarytool store-credentials $PROFILE --apple-id <apple-id> --team-id <team-id>" >&2
+  echo "  or set NOTARY_APPLE_ID, NOTARY_TEAM_ID and NOTARY_PASSWORD." >&2
   exit 1
 fi
 
@@ -61,11 +71,11 @@ echo "› Submitting to Apple notary service (this usually takes 1–5 minutes)�
 LOG="$OUT/notarize-$VERSION.log"
 # No grep -q in the pipeline: it closes the pipe on first match, tee dies with
 # SIGPIPE, and pipefail reports a failure for an accepted submission.
-xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait 2>&1 | tee "$LOG" || true
+xcrun notarytool submit "$ZIP" "${AUTH[@]}" --wait 2>&1 | tee "$LOG" || true
 if ! grep -q "status: Accepted" "$LOG"; then
   ID="$(grep -m1 -E '^\s*id:' "$LOG" | awk '{print $2}' || true)"
   echo "✗ Notarization not accepted. See $LOG" >&2
-  [ -n "$ID" ] && echo "  Details:  xcrun notarytool log $ID --keychain-profile $PROFILE" >&2
+  [ -n "$ID" ] && echo "  Details:  xcrun notarytool log $ID $AUTH_HINT" >&2
   exit 1
 fi
 

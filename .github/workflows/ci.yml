@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Typecheck, test, build app
+    runs-on: macos-latest   # Apple Silicon; the app bundles this runner's Node (arm64)
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+
+      # Same build as `npm run deploy`, ad-hoc signed with the hardened runtime:
+      # catches swiftc errors, stray unsigned Mach-O files and entitlement problems
+      # before they reach notarization.
+      - name: Build app bundle (ad-hoc)
+        run: bash scripts/build-app.sh
+
+      - name: Smoke test the bundled runtime
+        run: ProcessDetective.app/Contents/MacOS/node ProcessDetective.app/Contents/Resources/app/dist/index.js --help
+
+      - name: Zip app
+        run: ditto -c -k --keepParent ProcessDetective.app ProcessDetective-adhoc.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ProcessDetective-adhoc-${{ github.sha }}
+          path: ProcessDetective-adhoc.zip
+          retention-days: 7
