@@ -16,6 +16,7 @@ import { AdviceError, getAdvice } from './advice.js';
 import type { HistoryStore } from '../history/collector.js';
 import { RANGES } from '../history/store.js';
 import { handleHealthRoute } from './health-routes.js';
+import { checkRequest } from './guard.js';
 
 /** The single-page app, loaded once at startup (copied next to this module by the build). */
 const PAGE = readFileSync(fileURLToPath(new URL('./page.html', import.meta.url)), 'utf8');
@@ -29,8 +30,10 @@ function json(res: http.ServerResponse, code: number, obj: unknown): void {
 }
 
 /**
- * Start the read-only local web server. Bound to localhost by default so the
- * snapshot data never leaves the machine. Each request takes a fresh snapshot.
+ * Start the local web server. It is read-only by default: the one write path is the opt-in
+ * clean-up layer (src/health/actions.ts), which moves files to the Trash after a dry run
+ * and a confirmation and is switched off by PD_NO_ACTIONS=1. Bound to localhost by default
+ * so the snapshot data never leaves the machine. Each request takes a fresh snapshot.
  *
  * Pass a `historyStore` to enable `GET /api/history`.
  */
@@ -42,6 +45,21 @@ export function startServer(
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? '/', `http://${host}:${port}`);
+
+      // First thing, for every route: Host and Origin checks (and the extra rules for clean-up actions).
+      const length = req.headers['content-length'];
+      const verdict = checkRequest(
+        {
+          method: req.method ?? 'GET',
+          pathname: url.pathname,
+          host: req.headers.host,
+          origin: req.headers.origin,
+          contentType: req.headers['content-type'],
+          contentLength: length !== undefined && /^\d+$/.test(length) ? Number(length) : undefined,
+        },
+        { boundHost: host, port: req.socket.localPort ?? port },
+      );
+      if (!verdict.ok) return json(res, verdict.status, { error: verdict.error });
 
       if (url.pathname === '/' || url.pathname === '/index.html') {
         return send(res, 200, 'text/html; charset=utf-8', PAGE);
@@ -220,7 +238,7 @@ export function startServer(
         }
       }
 
-      if (await handleHealthRoute(req, res, url)) return;
+      if (await handleHealthRoute(req, res, url, host)) return;
 
       send(res, 404, 'text/plain; charset=utf-8', 'Not found');
     } catch (err) {

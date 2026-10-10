@@ -309,6 +309,8 @@ export interface ClutterItem {
   lastModified: number | null;   // ms epoch
   safety: SafetyClass;
   note?: string;                 // "iPhone 17 Pro", "3 uncommitted changes", "OrbStack is not running"
+  /** Stamped by the engine (never cached): this item may be offered to the clean-up layer. See isActionable(). */
+  actionable?: boolean;
 }
 
 export interface HealthFinding {
@@ -359,4 +361,34 @@ export interface HealthScanJob {
   progress: { done: number; total: number; current: string };
   report?: HealthReport;
   error?: string;
+}
+
+// ── Clean-up actions (Phase 2) ──
+export type ActionMethod = 'trash' | 'command';
+export interface ActionTarget { findingId: string; path: string }
+export interface ActionPlan {
+  token: string;
+  actionId: string;
+  method: ActionMethod;
+  createdAt: number;
+  reportAt: number;                 // `at` of the report the targets were matched against
+  targets: { findingId: string; path: string; bytes: number; safety: SafetyClass; note?: string }[];
+  refused: { findingId: string; path: string; reason: string }[];
+  totalBytes: number;
+  command?: string;                 // display string of the fixed command
+  explain: string;                  // one sentence: what happens and how to undo it
+  needsAck: boolean;                // any `ask` target, or the action itself is flagged
+}
+export interface ActionResult {
+  token: string; actionId: string; method: ActionMethod; at: number;
+  result: 'ok' | 'partial' | 'failed';
+  targets: { path: string; ok: boolean; trashedTo?: string; error?: string }[];
+  bytesPlanned: number; bytesFreed: number;
+  output?: string;                  // command actions: last 12 lines
+  note: string;
+}
+export interface AuditEntry {
+  at: number; actionId: string; method: ActionMethod; paths: string[];
+  bytesPlanned: number; bytesFreed: number; result: 'ok' | 'partial' | 'failed'; note: string;
+  trashedTo?: string[];
 }

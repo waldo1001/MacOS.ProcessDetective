@@ -13,9 +13,14 @@ import { startHistoryStore } from './history/collector.js';
 import { spawn } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { resolve as resolvePath } from 'node:path';
-import { collectHealth } from './health/engine.js';
+import { applyResultToCache, collectHealth } from './health/engine.js';
+import { makeContext } from './health/context.js';
+import { ALL_CHECKS } from './health/registry.js';
+import { ACTIONS, ActionError, actionsEnabled, executePlan, offeredCommands, planAction, selectTargets, takePlan } from './health/actions.js';
+import { checkActionable } from './health/actionable.js';
+import { readAudit } from './health/audit.js';
 import { buildHealthMarkdown, buildHealthReport } from './report/health.js';
-import { fmtPct, homePath } from './render/format.js';
+import { fmtBytes, fmtPct, homePath } from './render/format.js';
 import { color } from './util/color.js';
 import type { ProcessNode, ProcessTree } from './types.js';
 
@@ -147,7 +152,7 @@ export function buildProgram(): Command {
       if (opts.md) {
         mdPath = resolvePath(String(opts.md));
         try {
-          await writeFile(mdPath, buildHealthMarkdown(report), 'utf8');
+          await writeFile(mdPath, buildHealthMarkdown(report, await readAudit(100)), 'utf8');
         } catch (err) {
           return fail(`Could not write ${mdPath}: ${err instanceof Error ? err.message : err}`);
         }
@@ -159,6 +164,110 @@ export function buildProgram(): Command {
         console.log(mdPath);
       } else {
         console.log(buildHealthReport(report));
+      }
+    });
+
+  program
+    .command('clean')
+    .description('Clean-up actions: a dry run first, then move to the Trash (opt-in; PD_NO_ACTIONS=1 turns it off)')
+    .argument('[actionId]', ACTIONS.map((a) => a.id).join(' | '))
+    .option('--list', 'list the actionable items and the available command actions')
+    .option('--json', 'print the list, plan or result as JSON')
+    .option('--finding <id>', "select that finding's actionable regenerates/orphan items (repeatable)", collect, [] as string[])
+    .option('--path <p>', 'select one item of the report (repeatable)', collect, [] as string[])
+    .option('--include-ask', "also select 'ask' items, and acknowledge a plan that needs it")
+    .option('--apply', 'perform the plan (needs --confirm <token> from the dry run)')
+    .option('--confirm <token>', 'the token the dry run printed')
+    .action(async (actionId: string | undefined, opts) => {
+      const cfg = actionsEnabled('127.0.0.1');
+      if (!cfg.enabled) return fail(`Clean-up actions are off: ${cfg.reason}.`);
+      if (!opts.list && !actionId) return fail('Name an action (see --list), or use --list.');
+
+      // A quick report carries the last full scan's clutter. Only the checks the clean-up layer needs run.
+      const keep = ['runaway-logs', 'launch-agents', 'apfs-snapshots', 'brew', 'disk-clutter'];
+      const report = await collectHealth({ mode: 'quick', awaitCached: true, checks: ALL_CHECKS.filter((c) => keep.includes(c.id)) });
+      if (report.fullScan.at === null) return fail('No full scan on record — run `pdetective health --full` first.');
+      const ctx = await makeContext();
+
+      if (opts.list) {
+        const groups = report.findings
+          .map((f) => ({ f, items: (f.items ?? []).filter((it) => checkActionable(f, it, ctx.home, cfg.sandbox).ok) }))
+          .filter((g) => g.items.length > 0);
+        const commands = offeredCommands(report, ctx);
+        if (opts.json) {
+          console.log(JSON.stringify({
+            enabled: true, sandbox: cfg.sandbox,
+            findings: groups.map(({ f, items }) => ({ id: f.id, title: f.title, items })),
+            commands: commands.map((a) => ({ id: a.id, title: a.title, findingId: a.findingId, needsAck: a.needsAck === true })),
+          }, null, 2));
+          return;
+        }
+        if (cfg.sandbox) console.log(color.yellow(`SANDBOX ${cfg.sandbox} — only items inside it can be cleaned`));
+        console.log(color.bold('Actionable items (moved to the Trash, never deleted)'));
+        if (groups.length === 0) console.log('  none');
+        for (const { f, items } of groups) {
+          console.log(`\n${color.cyan(f.id)}  ${f.title}`);
+          for (const it of items) {
+            console.log(`  ${fmtBytes(it.bytes).padStart(9)}  ${it.safety.padEnd(11)} ${homePath(it.path)}${it.note ? color.dim(`  [${it.note}]`) : ''}`);
+          }
+        }
+        console.log(`\n${color.bold('Command actions')}`);
+        if (commands.length === 0) console.log('  none offered by the current report');
+        for (const a of commands) console.log(`  ${a.id.padEnd(28)} ${a.title}${a.needsAck ? color.dim('  (needs --include-ask)') : ''}`);
+        console.log(color.dim('\nDry run: pdetective clean trash-paths --path <p>   |   pdetective clean <commandActionId>'));
+        return;
+      }
+
+      try {
+        const action = ACTIONS.find((a) => a.id === actionId);
+        if (!action) return fail(`Unknown action "${actionId}". Available: ${ACTIONS.map((a) => a.id).join(', ')}`);
+        let targets: { findingId: string; path: string }[] = [];
+        if (action.method === 'trash') {
+          const sel = selectTargets(report, { findingIds: opts.finding, paths: opts.path, includeAsk: Boolean(opts.includeAsk) }, ctx.home, cfg.sandbox);
+          for (const p of sel.problems) console.error(color.yellow(p));
+          targets = sel.targets;
+          if (targets.length === 0) return fail('Nothing selected: use --finding <id> and/or --path <p> (see --list).');
+        } else if (opts.finding.length || opts.path.length) {
+          return fail(`${action.id} takes no --finding/--path: it runs one fixed command.`);
+        }
+
+        const plan = await planAction(action.id, targets, { ctx, report });
+        if (!opts.apply) {
+          if (opts.json) console.log(JSON.stringify(plan, null, 2));
+          else {
+            console.log(color.bold(`Dry run: ${action.id}`) + color.dim(`   token ${plan.token}`));
+            console.log(plan.command ? `  Command: ${plan.command}` : '  Method: to the Trash — recoverable until you empty it');
+            for (const t of plan.targets) console.log(`  ${fmtBytes(t.bytes).padStart(9)}  ${t.safety.padEnd(11)} ${homePath(t.path)}`);
+            for (const r of plan.refused) console.log(color.yellow(`  refused  ${homePath(r.path)} — ${r.reason}`));
+            if (plan.method === 'trash') console.log(`  Total ${fmtBytes(plan.totalBytes)} in ${plan.targets.length} item${plan.targets.length === 1 ? '' : 's'}`);
+            console.log(`  ${plan.explain}`);
+            if (plan.method === 'command' || plan.targets.length > 0) {
+              console.log(color.dim(`\nTo perform it: add --apply --confirm ${plan.token}${plan.needsAck ? ' --include-ask' : ''}`));
+            } else {
+              console.log(color.yellow('\nNothing to do: every target was refused.'));
+            }
+          }
+          if (plan.method === 'trash' && plan.targets.length === 0) process.exitCode = 1;
+          return;
+        }
+
+        if (!opts.confirm) return fail('--apply needs --confirm <token> from the dry run.');
+        if (opts.confirm !== plan.token) return fail('The token does not match this plan: it is wrong, or the paths changed since the dry run. Nothing was done — run the dry run again.');
+        if (plan.needsAck && !opts.includeAsk) return fail('This plan needs --include-ask: it removes things you may want back.');
+        if (plan.method === 'trash' && plan.targets.length === 0) return fail('Nothing to do: every target was refused.');
+        takePlan(plan.token); // the plan is run directly; drop the stored copy
+        const result = await executePlan(plan, { ctx, report, ack: Boolean(opts.includeAsk) });
+        await applyResultToCache(result);
+        if (opts.json) console.log(JSON.stringify(result, null, 2));
+        else {
+          console.log(color.bold(`${action.id}: ${result.result.toUpperCase()}`));
+          for (const t of result.targets) console.log(`  ${t.ok ? color.green('✓') : color.red('✗')} ${homePath(t.path)}${t.trashedTo ? color.dim(` → ${homePath(t.trashedTo)}`) : ''}${t.error ? color.red(` — ${t.error}`) : ''}`);
+          if (result.output) console.log(color.dim(result.output));
+          console.log(result.note);
+        }
+        if (result.result !== 'ok') process.exitCode = 1;
+      } catch (err) {
+        fail(err instanceof ActionError ? `Refused: ${err.message}` : `Clean-up failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     });
 
@@ -213,7 +322,7 @@ export function buildProgram(): Command {
       }
       const url = `http://${opts.host}:${opts.port}`;
       console.log(`${color.bold('Process Detective web UI')}  →  ${color.cyan(url)}`);
-      console.log(color.dim('Read-only · bound to localhost · Ctrl-C to stop'));
+      console.log(color.dim('Read-only by default (clean-up is opt-in, PD_NO_ACTIONS=1 turns it off) · bound to localhost · Ctrl-C to stop'));
       if (opts.open && opts.host === '127.0.0.1') {
         spawn('open', [url], { stdio: 'ignore' }).on('error', () => {});
       }
@@ -323,6 +432,11 @@ function sleep(ms: number, shouldStop: () => boolean): Promise<void> {
       }
     }, step);
   });
+}
+
+/** commander accumulator for repeatable options. */
+function collect(value: string, previous: string[]): string[] {
+  return [...previous, value];
 }
 
 function fail(msg: string): void {

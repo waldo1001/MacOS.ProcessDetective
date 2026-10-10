@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import type { HealthFinding, HealthReport, HealthScanJob, HealthVitals } from '../types.js';
+import type { ActionResult, HealthFinding, HealthReport, HealthScanJob, HealthVitals } from '../types.js';
+import { fmtBytes } from '../render/format.js';
 import type { HealthCheck, HealthContext } from './context.js';
 import { makeContext } from './context.js';
 import { defaultCache, type CacheEntry, type HealthCacheStore } from './cache.js';
 import { ALL_CHECKS, runCheck, runPool, type CheckRun } from './registry.js';
-import { computeReclaimable, computeVerdict, sortFindings } from './verdict.js';
+import { computeReclaimable, computeVerdict, itemLabel, sortFindings } from './verdict.js';
+import { actionsConfig, stampActionable } from './actionable.js';
 import { SKIP_REASON, skipIds } from './util.js';
 
 const DAY = 86_400_000;
+const GIB = 1024 ** 3;
 const QUICK_POOL = 6;
 /**
  * After a failed background refresh, wait before trying again: as long as the check's
@@ -249,7 +252,15 @@ export async function collectHealth(opts: CollectOptions): Promise<HealthReport>
       if (v !== undefined) (vitals as unknown as Record<string, unknown>)[k] = v;
     }
   }
-  const sorted = sortFindings(checks.flatMap((c) => buckets.get(c.id) ?? []));
+  // Which items the clean-up layer may offer. Stamped on copies, never on the cached objects, so
+  // the flag cannot outlive the kill-switch or the sandbox it was computed under.
+  const actions = actionsConfig();
+  const sorted = stampActionable(
+    sortFindings(checks.flatMap((c) => buckets.get(c.id) ?? [])),
+    ctx.home,
+    actions.sandbox,
+    actions.enabled,
+  );
   const reclaimable = computeReclaimable(sorted);
   const { verdict, reason } = computeVerdict(sorted, reclaimable, vitals);
   const at = Date.now();
@@ -314,4 +325,83 @@ export function startFullScan(opts: Partial<CollectOptions> = {}): HealthScanJob
 
 export function getScanJob(id: string): HealthScanJob | undefined {
   return jobs.get(id);
+}
+
+// ---------------------------------------------------------------------------
+// After a clean-up
+// ---------------------------------------------------------------------------
+
+/**
+ * Drop the given paths (and anything inside them) from findings. A finding left without items
+ * is dropped; one that keeps some gets its reclaimable bytes, severity and title recomputed
+ * from the items that remain. Pure.
+ */
+export function pruneFindings(findings: HealthFinding[], gone: string[]): HealthFinding[] {
+  const isGone = (p: string): boolean => gone.some((g) => p === g || p.startsWith(`${g}/`));
+  const out: HealthFinding[] = [];
+  for (const f of findings) {
+    if (!f.items) {
+      out.push(f);
+      continue;
+    }
+    const items = f.items.filter((i) => !isGone(i.path));
+    if (items.length === f.items.length) out.push(f);
+    else if (items.length > 0) {
+      const total = items.reduce((s, i) => s + i.bytes, 0);
+      const reclaimable = items
+        .filter((i) => i.safety === 'regenerates' || i.safety === 'orphan' || i.safety === 'ask')
+        .reduce((s, i) => s + i.bytes, 0);
+      out.push({
+        ...f,
+        items,
+        reclaimableBytes: reclaimable,
+        ...(f.checkId === 'disk-clutter'
+          ? {
+              severity: reclaimable >= GIB ? ('advice' as const) : ('info' as const),
+              title: `${itemLabel(f)}: ${fmtBytes(total)}${items.length > 1 ? ` in ${items.length} items` : ''}`,
+            }
+          : {}),
+      });
+    }
+  }
+  return out;
+}
+
+/** Remove trashed paths from the cached disk-clutter entry, so the next report no longer lists them. */
+export function pruneTargets(paths: string[], cache: HealthCacheStore = defaultCache()): void {
+  const e = cache.get('disk-clutter');
+  if (!e || paths.length === 0) return;
+  const findings = pruneFindings(e.findings, paths);
+  if (findings.length !== e.findings.length || findings.some((f, i) => f !== e.findings[i])) cache.set('disk-clutter', { ...e, findings });
+}
+
+/**
+ * Update the cache after an execution: trashed paths leave the cached survey and a brew
+ * cleanup invalidates the cached brew finding. Flushes, so a later process sees it.
+ */
+export async function applyResultToCache(result: ActionResult, cache: HealthCacheStore = defaultCache()): Promise<void> {
+  if (result.method === 'trash') {
+    pruneTargets(result.targets.filter((t) => t.ok).map((t) => t.path), cache);
+  }
+  if (result.actionId === 'brew-cleanup') cache.remove('brew');
+  await cache.flush();
+}
+
+/**
+ * {@link applyResultToCache}, then a fresh quick report becomes the current one (so a second
+ * plan for the same path is refused).
+ */
+export async function refreshAfterAction(
+  result: ActionResult,
+  opts: { cache?: HealthCacheStore; checks?: HealthCheck[]; ctx?: HealthContext } = {},
+): Promise<HealthReport> {
+  const cache = opts.cache ?? defaultCache();
+  await applyResultToCache(result, cache);
+  return collectHealth({
+    mode: 'quick',
+    awaitCached: false,
+    cache,
+    ...(opts.checks ? { checks: opts.checks } : {}),
+    ...(opts.ctx ? { ctx: opts.ctx } : {}),
+  });
 }

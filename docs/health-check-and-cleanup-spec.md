@@ -1,8 +1,8 @@
 # Spec — Mac health check + gated clean-up actions
 
-Status: **Phase 1 is built, verified and reviewed by Waldo in the UI (2026-10-03).
-Phase 2 below is implementation-ready** — re-verified against the Phase 1 code and this Mac on
-2026-10-03. The rows marked ⚠ in "Measured facts" were found only by running things for real.
+Status (2026-10-03): **Phase 1 is built, reviewed by Waldo and committed. Phase 2 is built and
+verified in the sandbox; it awaits Waldo's review in the UI and is not committed.** See "Phase 2
+— as built" for what differs from the plan and what has not been exercised for real.
 
 ## Build order (mandatory — read before anything else)
 
@@ -1143,6 +1143,42 @@ Run all of it; paste the outputs in your report.
 13. **Do NOT deploy, do NOT commit.** Stop and report.
 
 ---
+
+## Phase 2 — as built (2026-10-03)
+
+Verified independently after the build: 622 tests in 32 files (499 before), typecheck and build
+clean, and a live run against a sandbox folder — a real item and three free paths were refused,
+two junk folders were moved to the Trash (API and page), a replayed token got `409`, every guard
+case returned the expected code, and a command action was refused with and without the
+acknowledgement while the snapshot count stayed the same.
+
+Differences from the plan above (all stricter, or wording):
+- More refusals: a trailing slash, a symlinked base folder, a real path outside the home folder,
+  a target inside another selected target, an `lsof` that timed out or is missing, and a second
+  execution while one runs (`409`). A sandbox that is `/`, a top-level folder, or the home folder
+  or one of its parents turns actions off.
+- In a sandbox a command action is refused **before** the acknowledgement check.
+- A missing acknowledgement (`400`) does not consume the token; every other failure does.
+- `GET /api/health/actions` returns `actions: []` when disabled.
+- The texts do not promise *Put Back*: it was not verified for items trashed through
+  `NSFileManager`. They say the item stays in the Trash and the audit log records its origin.
+- `vitest.config.ts` excludes `.claude/**` (an agent worktree inside the project doubled the
+  test run) and `.gitignore` ignores `.claude/worktrees/`.
+
+Not exercised for real — only unit-tested with an injected runner: `brew-cleanup`,
+`thin-snapshots`, `simctl-delete-unavailable`. Nothing outside a sandbox folder was ever moved.
+
+Known limitations (follow-ups, not built):
+- **The server is not per-user.** Any local process — including another macOS account on the
+  same Mac — can reach `127.0.0.1:<port>` and, without an `Origin` header, plan and execute Trash
+  moves of this user's catalog items. Same-user processes gain nothing (they can already move
+  files); another account does. Closing it needs a secret that is not served over the socket
+  (the launcher hands a token to the web view; `serve` prints a tokenized URL).
+- The acknowledgement is a boolean the client sends: a UX gate, not a security boundary.
+- `simctl-delete-unavailable` plans the whole CoreSimulator folder size, which overstates what
+  it frees; "Cleaned this month" counts planned bytes for partial runs.
+- A CLI clean-up and a running server do not share a cache: the server lists the item until its
+  next scan, and a plan for it is refused ("it no longer exists").
 
 ## Constraints & non-goals (both phases)
 

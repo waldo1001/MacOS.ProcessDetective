@@ -1,13 +1,16 @@
 # process-detective
 
-A read-only macOS CPU/process detective. When your fans spin up and Activity
+A macOS CPU/process detective, read-only by default. When your fans spin up and Activity
 Monitor just says **`node`**, this tells you *who launched it, from which folder,
 with which command, and what it actually is* — e.g. "the Vite dev server for
 project `customer-x`, started by `npm run dev` under Claude Code".
 
-It never kills or modifies anything. It shells out to `ps` and `lsof` only, and
-requires **no sudo**. Anything it can't read (a restricted command line, a cwd it
-isn't allowed to see) degrades to `unknown` instead of failing.
+It never kills a process. It is **read-only by default**: the diagnostics shell out
+to `ps` and `lsof` and the like, and require **no sudo**. Clean-up is an opt-in
+action layer that never deletes — it moves things to the Trash after a dry run and a
+confirmation — and `PD_NO_ACTIONS=1` turns it off (see [Clean-up](#clean-up-opt-in)).
+Anything it can't read (a restricted command line, a cwd it isn't allowed to see)
+degrades to `unknown` instead of failing.
 
 ## Run as a native Mac app (recommended)
 
@@ -132,9 +135,10 @@ it. `docs/health-checks.md` lists every check, its command and what triggers eac
 snapshots still hold them, so `df` does not move. Health reports the snapshot count and the
 (no-elevated-rights) command to thin them: `tmutil thinlocalsnapshots / 999999999999 4`.
 
-**Read-only.** This phase only reads; fixes are printed as steps for you to run. The one file it
-writes is the cache, `health-cache.json` in `$PD_DATA_DIR` (default
-`~/Library/Application Support/ProcessDetective/`).
+**Read-only by default.** The checks only read; fixes are printed as steps for you to run, and
+the only changes Process Detective can make are the opt-in clean-up actions below. Besides the
+clean-up audit log, the one file it writes is the cache, `health-cache.json` in `$PD_DATA_DIR`
+(default `~/Library/Application Support/ProcessDetective/`).
 
 **Permission prompts.** A full scan lists `~/Downloads` and measures folders inside other apps'
 containers (OrbStack, Docker Desktop, the wallpaper cache); macOS may ask whether Process
@@ -145,7 +149,79 @@ shown under **Skipped** — never as "0 B". Granting Full Disk Access removes th
 
 Endpoints: `GET /api/health` (quick, ≤ 5 s), `POST /api/health/scan` (starts the full scan, returns
 a job id), `GET /api/health/scan/:jobId`, `GET /api/health/report?format=text|prompt|md`,
-`POST /api/health/check/login-items` (the on-demand check; raises the macOS dialog).
+`POST /api/health/check/login-items` (the on-demand check; raises the macOS dialog). The clean-up
+endpoints are listed under [Clean-up](#clean-up-opt-in).
+
+### Clean-up (opt-in)
+
+From the Health section you can tick rows of the **Reclaimable** table and move them **to the
+Trash**, and run three fixed clean-up commands. Every run is *dry run → plan shown → one confirm
+click → result + audit line*. Nothing is ever pre-selected and nothing is ever hard-deleted.
+
+```bash
+pdetective clean --list [--json]        # the actionable items and the available commands
+pdetective clean trash-paths --path <p> [--path <p>…] [--finding <id>…] [--include-ask]
+                                        # a dry run: prints the plan and a token
+pdetective clean trash-paths --path <p> --apply --confirm <token>     # perform exactly that plan
+```
+
+`clean` reads the clutter of the last full scan (`pdetective health --full` first). `--apply` needs
+the token the dry run printed (the plan is recomputed, so changed paths give another token) and
+`--include-ask` when the plan removes `ask` items. Exit code 1 on a refused or failed run.
+
+**What the safety contract means, in plain words**
+
+- **Only what the report found.** A target is an item of a finding in the *current* report. There is
+  no endpoint that takes a free path; the server keeps the plan, and *execute* takes a token, never paths.
+- **Only where the catalog looks, and only at least two folders below your home** (three below
+  `~/Library`). Never a symlink, never something that resolves outside the folder it was found in or
+  outside your home, never a live launchd `.plist`, never Parallels VMs or simulator devices (those
+  have their own tools). The checks run at plan time **and again just before acting**; anything that
+  changed is skipped, never forced. A disk image that another process has open, and an OrbStack or
+  Docker disk while that app runs, are refused.
+- **Trash, not delete.** Files move to the Trash (`NSFileManager.trashItemAtURL`, in-process: no Finder,
+  no Apple events, no permission prompt). They stay in the Trash until you empty it; the audit log records where each one came from, so it can be moved back (Finder may also offer *Put Back*).
+  Emptying the Trash is deliberately not built. Process Detective tells you the truth about space:
+  the result reports what `df` actually moved (normally nothing), because a trashed file still occupies
+  the disk until you empty the Trash — and local Time Machine snapshots can hold it after that.
+- **`ask` items need a second step.** Rows classed `ask` (VM disks, models, downloads, worktrees) have a
+  checkbox that stays disabled until you switch on *Include ‘ask’ items*, and the plan asks for an
+  acknowledgement.
+- **No sudo, no elevation, no Apple events.** Whatever needs root or the GUI stays a printed step.
+
+**The four actions**
+
+| id | what it does | where |
+|---|---|---|
+| `trash-paths` | moves the selected report items to the Trash | the checkbox column + **Review…** |
+| `brew-cleanup` | `brew cleanup` (old versions, stale downloads; not recoverable) | button on the Homebrew finding |
+| `thin-snapshots` | `tmutil thinlocalsnapshots / 999999999999 4` — deletes local restore points, asks for an acknowledgement | button on the snapshot finding |
+| `simctl-delete-unavailable` | `xcrun simctl delete unavailable` | button under the Reclaimable table |
+
+The commands are fixed argv arrays checked against a pattern before they run; no value from a request
+ever reaches them. A command is offered only while its finding is in the current report.
+
+**Audit log.** Every execution — also a failure — appends one line to `actions.jsonl` next to the
+health cache (`$PD_DATA_DIR`): time, action, paths, planned and freed bytes, result, where each item went
+in the Trash. The Health section shows "Cleaned this month", and *Copy findings (.md)* lists the
+clean-ups of the last 30 days.
+
+**Request guard.** The server has no login, so with a write path it checks every request: the `Host`
+header must be this server (`127.0.0.1`, `localhost` or `[::1]` on its real port — this defeats DNS
+rebinding), and a `POST` must come from this page (`Origin` equal to the `Host`) — a web page you visit
+cannot trigger the Touch ID check or a clean-up. Clean-up requests additionally need
+`Content-Type: application/json`, a body of at most 64 KiB, and a server bound to localhost. If you
+reach the page through a port forward or a proxy the `Host` differs and requests are refused.
+
+**Switches.** `PD_NO_ACTIONS=1` turns the whole layer off: the endpoints answer `403`, the page shows no
+checkbox and no button, and the CLI refuses. `PD_ACTIONS_SANDBOX=<absolute existing directory>` is for
+developing and testing the layer: the survey gains one entry that lists the sandbox's children, and
+planning and execution refuse every target whose real path is not inside it; command actions can be
+planned but are refused at execution. A sandbox that is set but is not an existing directory (or is the
+root, a top-level folder or your home) turns every action off instead of being ignored.
+
+Endpoints: `GET /api/health/actions`, `POST /api/health/action/plan` (`{actionId, targets?}`),
+`POST /api/health/action/execute` (`{token, ack?}`), `GET /api/health/actions/log`.
 
 ### History persistence
 
@@ -233,13 +309,15 @@ npm run dev -- <command>
 | `inspect <PID>` | Full detail for one process (chain, children, cwd, ports, scripts) |
 | `report <PID>` | Copy-friendly "CPU spike investigation" diagnostic |
 | `health [--full] [--json] [--md <file>] [--no-cache]` | Mac health check: verdict, vitals, findings, reclaimable clutter |
+| `clean --list` / `clean <action> [--apply --confirm <token>]` | Opt-in clean-up: dry run first, then move to the Trash ([details](#clean-up-opt-in)) |
 | `prompt <PID>` | Print a ready-to-paste investigation prompt for your AI agent |
 | `watch --threshold 80` | Live refresh, highlights spikes, keeps recent-spike history |
 
 ### `serve` — web UI (recommended)
 
-A graphical dashboard in your browser. Starts a tiny **read-only local web server**
-(Node's built-in `http`, zero dependencies, bound to `127.0.0.1`) that reuses the
+A graphical dashboard in your browser. Starts a tiny **local web server**, read-only
+by default (Node's built-in `http`, zero dependencies, bound to `127.0.0.1`; the one
+write path is the opt-in [clean-up](#clean-up-opt-in) layer), that reuses the
 exact same core and serves a single-page app — no build step, no bundler.
 
 ```bash
@@ -331,7 +409,7 @@ AI knows the data is obtainable.
 explaining what they do and where to look for the real signal, instead of showing
 no interpretation.
 
-All features are **read-only** and degrade gracefully: `sample`/`lsof` on processes
+All diagnostic features are **read-only** and degrade gracefully: `sample`/`lsof` on processes
 owned by another user or root return `available:false` with a clear note — they never
 crash the UI or break the layout.
 
@@ -491,6 +569,10 @@ src/
              checks/      one file per check (pure parsers + runner), see docs/health-checks.md
              catalog.ts   the curated clutter catalog + Application Support owner map
              verdict.ts   verdict rules, reclaimable totals (leaves only), finding order
+             actionable.ts which report items the clean-up layer may touch (pure), kill-switch, sandbox
+             actions.ts   plan / execute / plan store for the four clean-up actions
+             trash.ts     the only place that moves files to the Trash; audit.ts the actions.jsonl log
+  server/    guard.ts     Host / Origin / JSON request guard; health-routes.ts the health + clean-up endpoints
   service.ts              snapshot / enrich / hotProcesses orchestration
   cli.ts  index.ts        commander wiring + bin entry
 ```

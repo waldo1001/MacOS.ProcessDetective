@@ -1,7 +1,8 @@
 import type { HealthCheck, HealthContext, CheckResult } from '../context.js';
 import type { ClutterItem, HealthEvidence, HealthFinding } from '../../types.js';
 import { fmtBytes } from '../../render/format.js';
-import { CLUTTER_CATALOG, DEFAULT_MIN_BYTES, classifyAppSupport, type ClutterEntry } from '../catalog.js';
+import { DEFAULT_MIN_BYTES, classifyAppSupport, type ClutterEntry } from '../catalog.js';
+import { effectiveCatalog } from '../actionable.js';
 import { evidence, onDiskBytes, plural, realFs, runPool, skipIds, SKIP_REASON, withDeadline, type FsLike } from '../util.js';
 
 const GIB = 1024 ** 3;
@@ -396,7 +397,7 @@ function toFinding(entry: ClutterEntry, m: Measured): HealthFinding | null {
  */
 export async function surveyClutter(
   ctx: HealthContext,
-  catalog: ClutterEntry[] = CLUTTER_CATALOG,
+  catalog: ClutterEntry[] = effectiveCatalog(),
   onProgress?: (current: string) => void,
   fs: FsLike = realFs,
   budgetMs = SURVEY_BUDGET_MS,
@@ -437,5 +438,5 @@ export const diskClutterCheck: HealthCheck = {
   category: 'clutter',
   scope: 'full',
   timeoutMs: 100_000,
-  run: (ctx, onProgress) => surveyClutter(ctx, CLUTTER_CATALOG, onProgress),
+  run: (ctx, onProgress) => surveyClutter(ctx, effectiveCatalog(), onProgress),
 };

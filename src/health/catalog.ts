@@ -16,7 +16,9 @@ export interface ClutterEntry {
   olderThanDays?: number;        // files: mtime filter
   safety: SafetyClass;
   regenNote: string;
-  actionId?: string;             // Phase 2
+  actionId?: string;             // Phase 2: a fixed command action offered on this entry's finding
+  /** Phase 2: items of this entry are never moved to the Trash (the owner app keeps its own books). */
+  noTrash?: boolean;
   minBytes?: number;             // per item; default 500 MiB
   ownerCheck?: boolean;          // classify each child with classifyAppSupport
   runningHint?: { name: RegExp; label: string };   // note "OrbStack is not running" from ctx.processes
@@ -39,6 +41,7 @@ export const CLUTTER_CATALOG: ClutterEntry[] = [
   {
     id: 'coresimulator', title: 'iOS Simulator devices', kind: 'children',
     base: '~/Library/Developer/CoreSimulator/Devices', nameFromPlist: 'device.plist',
+    noTrash: true, actionId: 'simctl-delete-unavailable',
     safety: 'ask', regenNote: '`xcrun simctl delete unavailable` is always safe; named devices lose their state',
   },
   {
@@ -95,7 +98,7 @@ export const CLUTTER_CATALOG: ClutterEntry[] = [
   },
   {
     id: 'parallels-vms', title: 'Parallels VMs', kind: 'children',
-    base: '~/Parallels', match: /\.pvm$/, minBytes: 0,
+    base: '~/Parallels', match: /\.pvm$/, minBytes: 0, noTrash: true,
     safety: 'keep', regenNote: 'listed for transparency only',
   },
   {

@@ -1,4 +1,4 @@
-import type { HealthCategory, HealthFinding, HealthReport, HealthSeverity, SafetyClass } from '../types.js';
+import type { AuditEntry, HealthCategory, HealthFinding, HealthReport, HealthSeverity, SafetyClass } from '../types.js';
 import { fmtBytes, homePath } from '../render/format.js';
 import { flattenItems, itemLabel } from '../health/verdict.js';
 
@@ -160,8 +160,20 @@ export function buildHealthPrompt(r: HealthReport, now = Date.now()): string {
 
 const esc = (s: string): string => s.replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ');
 
-/** The findings file written by hand today: verdict table, what to fix, clutter table, commands used. */
-export function buildHealthMarkdown(r: HealthReport, now = Date.now()): string {
+const AUDIT_WINDOW_MS = 30 * 86_400_000;
+
+/** One line of the "Clean-ups executed" table. */
+function auditWhat(e: AuditEntry): string {
+  if (e.method === 'command') return e.actionId;
+  const shown = e.paths.slice(0, 3).map((p) => `\`${homePath(p)}\``).join(', ');
+  return `${e.paths.length} ${e.paths.length === 1 ? 'item' : 'items'} to the Trash: ${shown}${e.paths.length > 3 ? ` + ${e.paths.length - 3} more` : ''}`;
+}
+
+/**
+ * The findings file written by hand today: verdict table, what to fix, clutter table, commands used,
+ * and the clean-ups the audit log recorded in the last 30 days (newest first).
+ */
+export function buildHealthMarkdown(r: HealthReport, audit: AuditEntry[] = [], now = Date.now()): string {
   const out: string[] = [];
   out.push(`# Mac health check — ${dateOf(r.at)}`, '');
   out.push(`**Verdict: ${r.verdict}** — ${r.verdictReason}`, '');
@@ -214,6 +226,13 @@ export function buildHealthMarkdown(r: HealthReport, now = Date.now()): string {
   if (r.skipped.length) {
     out.push('## Skipped (not checked)', '', ...r.skipped.map((s) => `- ${s.id}: ${s.reason}`), '');
   }
-  out.push('## Clean-ups executed', '', 'none — Phase 1 is read-only', '');
+  const recent = audit.filter((e) => now - e.at <= AUDIT_WINDOW_MS).sort((a, b) => b.at - a.at);
+  out.push('## Clean-ups executed', '');
+  if (recent.length === 0) out.push('none yet', '');
+  else {
+    out.push('| Date | What | Result | Size |', '|---|---|---|---|');
+    for (const e of recent) out.push(`| ${dateOf(e.at)} | ${esc(auditWhat(e))} | ${e.result} | ${fmtBytes(e.bytesPlanned)} |`);
+    out.push('');
+  }
   return out.join('\n');
 }

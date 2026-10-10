@@ -22,6 +22,8 @@ export interface CacheFailure {
 export interface HealthCacheStore {
   get(id: string): CacheEntry | undefined;
   set(id: string, e: CacheEntry): void;       // schedules a flush
+  /** Drop one check's entry (after a clean-up made it stale); the next request refreshes it. */
+  remove(id: string): void;
   /** Last failed run of a cached check; the engine backs off from re-running it for a while. */
   getFailure(id: string): CacheFailure | undefined;
   setFailure(id: string, f: CacheFailure | null): void;
@@ -43,6 +45,7 @@ export function memoryCache(): HealthCacheStore {
   return {
     get: (id) => entries.get(id),
     set: (id, e) => void entries.set(id, e),
+    remove: (id) => void entries.delete(id),
     getFailure: (id) => failures.get(id),
     setFailure: (id, f) => void (f ? failures.set(id, f) : failures.delete(id)),
     lastFullScanAt: null,
@@ -98,8 +101,8 @@ function loadFile(file: string): CacheFile {
 /**
  * JSON file store. Loads once, tolerates a missing/corrupt file. Writes are atomic
  * (tmp + rename), serialised through one promise chain, and never throw — a
- * read-only data dir just means no cache. This file is the only thing the health
- * check writes.
+ * read-only data dir just means no cache. Besides the audit log of clean-up actions,
+ * this file is the only thing the health check writes.
  */
 export function fileCache(file: string): HealthCacheStore {
   const data = loadFile(file);
@@ -127,6 +130,10 @@ export function fileCache(file: string): HealthCacheStore {
     get: (id) => data.entries[id],
     set: (id, e) => {
       data.entries[id] = e;
+      schedule();
+    },
+    remove: (id) => {
+      delete data.entries[id];
       schedule();
     },
     getFailure: (id) => data.failures[id],

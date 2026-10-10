@@ -16,16 +16,41 @@ describe('parseDf / disk-space', () => {
     const vols = parseDf(fixture('df-k.txt'));
     expect(vols.map((v) => v.mount)).toEqual(['/']);
     expect(vols[0]!.availBytes).toBe(1433398200 * 1024);
-    expect(vols[0]!.usedBytes).toBe(12337068 * 1024);
   });
 
-  it('sets diskFreeBytes from Available, not from total − used', async () => {
+  it('reports the APFS container usage for /, not the sealed system volume\'s Used column', () => {
+    const v = parseDf(fixture('df-k.txt'))[0]!;
+    // Used column is 12337068 KB (0.6 %); the Data volume alone holds 491912708 KB.
+    expect(v.usedBytes).toBe((1948404040 - 1433398200) * 1024);
+    expect(v.usedBytes).not.toBe(12337068 * 1024);
+    expect(v.usedPct).toBeCloseTo(26.43, 2);
+    expect(v.totalBytes - v.usedBytes).toBe(v.availBytes);
+  });
+
+  it('keeps the Used column for /Volumes/* (a sparse image\'s total is virtual)', () => {
+    // Real rows: a Time Machine sparse bundle on a NAS (15.6 TB virtual, 382 GB left on the
+    // share) and an external single-volume disk.
+    const df = [
+      'Filesystem     1024-blocks      Used  Available Capacity iused       ifree %iused  Mounted on',
+      '/dev/disk3s1s1  1948404040  12337068 1423628692     1%  458732  4293266919    0%   /',
+      '/dev/disk7s1   15625000000 577043568  382227920    61% 5705275  3822279200    0%   /Volumes/Backups of Mac',
+      '/dev/disk9s1     976490576 400000000  576490576    41%  100000  5764905760    0%   /Volumes/External',
+    ].join('\n');
+    const [, backups, external] = parseDf(df);
+    expect(backups!.name).toBe('Backups of Mac');
+    expect(backups!.usedBytes).toBe(577043568 * 1024);
+    expect(backups!.availBytes).toBe(382227920 * 1024);
+    expect(backups!.usedPct).toBeCloseTo(3.69, 2);
+    expect(external!.usedBytes).toBe(400000000 * 1024);
+  });
+
+  it('sets diskFreeBytes from Available, not from total − the Used column', async () => {
     const volumes = parseDf(fixture('df-k.txt'));
     const ctx = fakeContext({ system: { storage: { volumes } } });
     const r = await diskSpaceCheck.run(ctx);
     const v = volumes[0]!;
     expect(r.vitals!.diskFreeBytes).toBe(1433398200 * 1024);
-    expect(r.vitals!.diskFreeBytes).not.toBe(v.totalBytes - v.usedBytes);
+    expect(r.vitals!.diskFreeBytes).not.toBe((1948404040 - 12337068) * 1024);
     expect(r.vitals!.diskTotalBytes).toBe(v.totalBytes);
     expect(r.findings[0]!.severity).toBe('info');
     expect(r.findings[0]!.title).toBe('1.3 TB free of 1.8 TB');

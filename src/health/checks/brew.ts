@@ -23,10 +23,10 @@ export function parseBrewCleanup(text: string): number {
   return Math.round(parseFloat(m[1]!) * (mult[m[2]!.toUpperCase()] ?? 1));
 }
 
-const BREW_PATHS = ['/opt/homebrew/bin/brew', '/usr/local/bin/brew'];
+export const BREW_PATHS = ['/opt/homebrew/bin/brew', '/usr/local/bin/brew'];
 
 /** Never let brew touch the network or phone home: these two variables are always set. */
-const BREW_ENV = ['HOMEBREW_NO_AUTO_UPDATE=1', 'HOMEBREW_NO_ANALYTICS=1'];
+export const BREW_ENV = ['HOMEBREW_NO_AUTO_UPDATE=1', 'HOMEBREW_NO_ANALYTICS=1'];
 
 async function run(ctx: HealthContext): Promise<CheckResult> {
   const brew = BREW_PATHS.find((p) => ctx.exists(p));

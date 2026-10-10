@@ -106,7 +106,7 @@ describe('buildHealthPrompt', () => {
 });
 
 describe('buildHealthMarkdown', () => {
-  const md = buildHealthMarkdown(report(), NOW);
+  const md = buildHealthMarkdown(report(), [], NOW);
   it('has the dated title, the verdict table and prints 9.9 GB (not 10 GB) for 10_630_000_000 bytes', () => {
     expect(md.startsWith('# Mac health check — 2026-10-03')).toBe(true);
     expect(md).toContain('| Area | State | Evidence |');
@@ -114,13 +114,13 @@ describe('buildHealthMarkdown', () => {
     expect(md).toContain('| 9.9 GB |');
     expect(md).not.toContain('10 GB');
   });
-  it('lists what is worth fixing with manual steps, the commands used (de-duplicated) and the Phase 1 clean-up line', () => {
+  it('lists what is worth fixing with manual steps, the commands used (de-duplicated) and the clean-up line', () => {
     expect(md).toContain('### [WARN] macOS 26.7.1 is available');
     expect(md).toContain('System Settings → General → Software Update');
     expect(md).toContain('## Commands used');
     expect(md.match(/softwareupdate -l/g)!.length).toBe(1);
     expect(md).toContain('## Clean-ups executed');
-    expect(md).toContain('none — Phase 1 is read-only');
+    expect(md).toContain('none yet');
     expect(md).toContain('## Skipped (not checked)');
   });
   it('the clutter table has Size / Where / What / Safe? columns', () => {

@@ -31,8 +31,10 @@ export interface SystemStats {
   };
   storage: {
     volumes: {
-      name: string; mount: string; totalBytes: number; usedBytes: number; usedPct: number;
-      /** The `Available` column of `df -k` (the real free space; `total − used` over-reports it on APFS). */
+      name: string; mount: string; totalBytes: number;
+      /** For `/`: `total − Available` (the APFS container's usage). Elsewhere: the `Used` column. */
+      usedBytes: number; usedPct: number;
+      /** The `Available` column of `df -k` (the real free space; `total − Used` over-reports it on APFS). */
       availBytes: number;
     }[];
   };
@@ -119,13 +121,18 @@ export function parseDf(out: string): SystemStats['storage']['volumes'] {
     const c = line.trim().split(/\s+/);
     if (c.length < 9 || !c[0]!.startsWith('/dev/')) continue;
     const totalBytes = num(c[1]) * 1024;
-    const usedBytes = num(c[2]) * 1024;
     const availBytes = num(c[3]) * 1024;
     const mount = c.slice(8).join(' ');
     // APFS volumes share a container; collapse to the most useful mounts only.
     if (!(mount === '/' || mount.startsWith('/Volumes/'))) continue;
     if (seen.has(mount) || totalBytes === 0) continue;
     seen.add(mount);
+    // `/` is the sealed system snapshot: its `Used` column (~12 GB) leaves out the Data volume
+    // and every other volume in the container. `total − Available` is the container's real
+    // usage (what Finder and `diskutil apfs list` show). Not for /Volumes/*: a sparse disk
+    // image (Time Machine on a NAS) reports its virtual size as total, so there it would
+    // claim terabytes used — keep the `Used` column.
+    const usedBytes = mount === '/' ? Math.max(0, totalBytes - availBytes) : num(c[2]) * 1024;
     vols.push({
       name: mount === '/' ? 'Macintosh HD' : mount.replace('/Volumes/', ''),
       mount,

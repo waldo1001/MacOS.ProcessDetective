@@ -3,8 +3,9 @@
 What the **Health** section (and `pdetective health`) looks at, the exact command behind each
 check, how often it runs, and what makes it raise a finding. The design lives in
 [`health-check-and-cleanup-spec.md`](health-check-and-cleanup-spec.md); this file is the durable
-per-check reference. Phase 1 is read-only: no elevated rights, no scripting bridge, and the only
-file it writes is the health cache.
+per-check reference. The checks are read-only: no elevated rights, no scripting bridge, and the only
+file they write is the health cache. The opt-in clean-up layer (see [Actions](#actions)) is the one
+place that changes anything, and it does so only after a dry run and a confirmation.
 
 ## How a report is built
 
@@ -152,3 +153,109 @@ and Downloads prompts.
 | `PD_HEALTH_BREW_DOCTOR=1` | also run `brew doctor` (up to 60 s) in the cached `brew` check |
 | `PD_HEALTH_SKIP` | comma-separated check ids and/or clutter-catalog ids that never run (shown under *Skipped*) |
 | `PD_NO_ELEVATED=1` | the on-demand `login-items` check refuses to raise the authorization dialog |
+| `PD_NO_ACTIONS=1` | turns the clean-up layer off: the action endpoints answer `403`, the page shows no checkbox or button, items are not marked actionable, `pdetective clean` refuses |
+| `PD_ACTIONS_SANDBOX=<dir>` | confines the clean-up layer to that absolute, existing directory (for development and smoke tests); set but unusable = actions off |
+
+## Actions
+
+The Health section can move **reclaimable items to the Trash** and run **three fixed commands**.
+Nothing here runs on its own and nothing is ever hard-deleted. The design and its rationale are in
+[`health-check-and-cleanup-spec.md`](health-check-and-cleanup-spec.md) (Phase 2); this chapter is the
+durable reference.
+
+### Which items can be cleaned (`src/health/actionable.ts`)
+
+An item of a finding is **actionable** (the engine stamps `item.actionable: true`; the stamp is never
+cached) when all of these hold:
+
+- its safety class is `regenerates`, `orphan` or `ask` — never `keep` or `manual`;
+- its path is absolute and normalized (no `..`, no trailing slash), lies under your home folder at least
+  two segments deep (three under `~/Library`);
+- it has the shape its producer can produce:
+
+  | producer | the path must be |
+  |---|---|
+  | `disk-clutter`, kind `path` | the entry's base itself (`~/.npm/_cacache`) |
+  | `disk-clutter`, kind `children` / `files` | directly inside the entry's base, matching the entry's `match` / `exclude` |
+  | `disk-clutter`, kind `worktrees` | `…/.claude/worktrees/<name>` |
+  | `disk-clutter`, kind `devops-agents` | `~/<agent folder>/_work` |
+  | `runaway-logs` | a file at most three levels under `~/Library/Logs` |
+  | `launch-agents` | directly inside `~/Library/LaunchAgents` and **not** a `.plist` (strays only) |
+  | any other finding | not actionable |
+
+- its catalog entry is not marked `noTrash` (`coresimulator` and `parallels-vms`: simulator devices keep
+  their own bookkeeping, VMs are never touched).
+
+### The checks around every action (`resolveTargets`)
+
+Run at **plan time** and again **immediately before acting**; a target that fails the second time is
+skipped as "changed since the dry run", never forced:
+
+1. the target is an item of the finding in the server's *current* report (`getLastReport()`), same path;
+2. it is actionable (above);
+3. with a sandbox set: its path is inside the sandbox (lexical, before any file is touched), and its real
+   path is too;
+4. `lstat` works and it is not a symlink; the folder it was found in is not a symlink either;
+5. `realpath` of the item lies inside `realpath` of that folder, and inside your home (or the sandbox);
+6. an entry with a `runningHint` whose process is running is refused ("OrbStack is running — quit it first");
+7. a single `.raw .img .qcow2 .dmg .iso` file is refused when `lsof -- <path>` (10 s) prints a data row on
+   stdout (warnings on stderr are ignored; an `lsof` that timed out or is missing is a refusal, not a pass);
+8. a target inside another selected target is refused (the parent takes it along).
+
+### The four actions (`src/health/actions.ts`)
+
+| id | method | offered on | argv (fixed; never built from a request) | timeout |
+|---|---|---|---|---|
+| `trash-paths` | Trash | the Reclaimable table | — (paths are arguments of one constant script, `src/health/trash.ts`) | 120 s per 50 paths |
+| `brew-cleanup` | command | finding `brew` (only the `advice` one that carries `actionId`) | `/usr/bin/env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1 <brew> cleanup` | 120 s |
+| `thin-snapshots` | command, needs acknowledgement | finding `apfs-snapshots` | `/usr/bin/tmutil thinlocalsnapshots / 999999999999 4` | 120 s |
+| `simctl-delete-unavailable` | command | finding `coresimulator` | `/usr/bin/xcrun simctl delete unavailable` | 180 s |
+
+Each command's argv joined with spaces must match its pattern before it runs. A command plan has no
+targets; the command shown in the plan is compared with the recomputed one at execution.
+
+**Plan → token → execute.** `planAction` returns an `ActionPlan` whose token is the first 16 hex of
+`sha256(actionId + "\n" + sorted paths)` (sizes are not part of it, so they can drift without invalidating
+the plan). The server stores the plan (5 minutes, single use, at most 20); execute takes the token, never
+paths. `ask` targets and `thin-snapshots` need an acknowledgement. Only one execution runs at a time.
+
+**The space.** `df -k /` (`Available`) is read before and after. For the Trash the result says plainly that
+the items are in the Trash and the space is freed when you empty it (and that local snapshots can hold it
+after that). For commands, when `df` moved less than half of what was planned and local snapshots exist, the
+result says the space is held by the snapshots.
+
+**After an execution** the trashed paths leave the cached `disk-clutter` entry (a finding left without items
+is dropped, its size/title/severity recomputed), a `brew-cleanup` drops the cached `brew` entry, and a fresh
+quick report becomes the current one — so a second plan for the same path is refused.
+
+### Endpoints
+
+| endpoint | |
+|---|---|
+| `GET /api/health/actions` | `{enabled, reason?, sandbox, actions[]}` — `actions` is empty when disabled |
+| `POST /api/health/action/plan` | `{actionId, targets?: [{findingId, path}]}` → `ActionPlan`; `400` bad body / unknown action, `403` disabled, `409` no current report or a command not offered |
+| `POST /api/health/action/execute` | `{token, ack?}` → `{result, report}`; `409` unknown / expired / used token, `400` missing acknowledgement, `403` disabled or a command action in a sandbox |
+| `GET /api/health/actions/log` | `{entries[≤100, newest first], cleanedThisMonthBytes}` |
+
+### Audit log
+
+`<data dir>/actions.jsonl`, append-only, one JSON line per execution (also failures):
+`{at, actionId, method, paths, bytesPlanned, bytesFreed, result: ok|partial|failed, note, trashedTo?}`.
+Writing it never throws: a read-only data dir cannot turn a finished clean-up into an error.
+
+### Request guard (`src/server/guard.ts`)
+
+| rule | applies to | refuses with |
+|---|---|---|
+| **G1 Host** — when bound to loopback, `Host` must be `127.0.0.1:<port>`, `localhost:<port>` or `[::1]:<port>` on the real port | every route | `403` |
+| **G2 Origin** — an `Origin` header, when present, must equal `http://` + `Host` | every non-`GET`/`HEAD` request | `403` |
+| **G3 actions** — loopback bind, `Content-Type: application/json`, body ≤ 64 KiB and valid JSON | `POST /api/health/action/*` | `403` / `415` / `400` |
+
+G1 and G2 protect the older routes too: the on-demand login-items check raises a Touch ID dialog and the
+elevated sample raises an administrator dialog; a web page must not be able to trigger either.
+
+### Checks that have no action
+
+Login items, launch agents with a dangling program, the `/usr/local` Node install and everything that needs
+administrator rights or the GUI stay **manual**: the finding carries the steps, Process Detective runs none
+of them. Emptying the Trash is deliberately not an action.

@@ -5,3 +5,4 @@ ProcessDetective.app/
 .DS_Store
 release/
 .deploy.lock/
+.claude/worktrees/

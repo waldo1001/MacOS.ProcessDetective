@@ -128,6 +128,17 @@
   .hrt-h button { background:none; border:none; color:var(--acc); font:600 10px var(--sans); letter-spacing:.07em; text-align:left; padding:0; cursor:pointer; }
   .hrt-r.dim { opacity:.5; }
   .hpath { font-size:11px; word-break:break-all; }
+  .hrt-h.hsel, .hrt-r.hsel { grid-template-columns:26px 84px minmax(180px,2fr) minmax(160px,2fr) 92px 74px; }
+  .hrt-r input[type=checkbox] { margin:0; width:15px; height:15px; accent-color:var(--acc); }
+  .hbar { position:sticky; bottom:0; display:flex; align-items:center; gap:10px; padding:9px 10px; margin-top:6px; background:var(--surf2); border:1px solid var(--acc); border-radius:8px; }
+  .hask { display:flex; align-items:center; gap:7px; padding:6px 8px 8px; font:500 12px var(--sans); color:var(--mut); }
+  .hmodal-bg { position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; }
+  .hmodal-bg[hidden] { display:none; }
+  .hmodal { width:min(720px,92vw); max-height:84vh; overflow:auto; box-shadow:0 12px 40px rgba(0,0,0,.45); }
+  .hmodal h2 { font:700 16px var(--sans); margin:0 0 10px; }
+  .hmrow { display:grid; grid-template-columns:78px 1fr 84px; gap:10px; align-items:center; padding:4px 0; border-bottom:1px solid var(--bd); }
+  .hmact { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; align-items:center; }
+  .btn:disabled { opacity:.45; cursor:default; }
 </style>
 </head>
 <body data-theme="dark">
@@ -157,6 +168,7 @@
   <main><div class="wrap" id="view"></div></main>
 </div>
 <div class="toast" id="toast"></div>
+<div class="hmodal-bg" id="hmodal" hidden></div>
 
 <script>
 // ---------- helpers ----------
@@ -204,7 +216,7 @@ const state = {
   fsChurnResult:null,     // last FsChurnSnapshot (null = not yet run)
   readMeasuring:false,    // true while POST /api/readdelta/:pid is in-flight
   readResult:null,        // last ReadActivitySnapshot (null = not yet run)
-  health:{ report:null, fetchedAt:0, loading:false, error:null, job:null, open:new Set(), sortDir:-1, refreshTries:0, pollT:null, refreshT:null, copies:[], busy:null },
+  health:{ report:null, fetchedAt:0, loading:false, error:null, job:null, open:new Set(), sortDir:-1, refreshTries:0, pollT:null, refreshT:null, copies:[], busy:null, actions:null, cleaned:0, sel:new Set(), askOn:false, modal:null, focusKey:null },
 };
 const H = []; // system series: {t,cpu,cpuUser,mem,netRx,netTx,energy,diskR,diskW}
 const CH = []; // per-core: CH[i] = [{t,v}]
@@ -586,7 +598,7 @@ function rEnergy(){
 function rDisk(){
   const s=state.sys;
   const vols=s.storage.volumes.map(v=>{ const pc=v.usedPct; const col=pc<70?"acc":pc<88?"warn":"crit";
-    return '<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font:600 12px var(--mono)"><span>'+esc(v.name)+'</span><span class="mut">'+fmtBytes(v.usedBytes)+' used · '+fmtBytes(v.totalBytes-v.usedBytes)+' free</span></div><div class="bar" style="margin-top:5px"><span style="width:'+pc+'%;background:var(--'+col+')"></span></div></div>'; }).join("");
+    return '<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font:600 12px var(--mono)"><span>'+esc(v.name)+'</span><span class="mut">'+fmtBytes(v.usedBytes)+' used · '+fmtBytes(v.availBytes)+' free</span></div><div class="bar" style="margin-top:5px"><span style="width:'+pc+'%;background:var(--'+col+')"></span></div></div>'; }).join("");
   return '<div class="shead"><h1>Disk</h1></div>'
     +'<div class="card" style="margin-bottom:10px"><div class="ctitle">VOLUMES</div>'+vols+'</div>'
     +'<div class="card" data-scrub="dk" style="margin-bottom:10px"><div class="ctitle">I/O THROUGHPUT · '+(state.range==="15m"?"LAST 15 MIN":"LAST "+state.range.toUpperCase())+' <span class="legend" style="margin:0 0 0 8px"><span><i style="background:var(--acc)"></i>read</span><span><i style="background:var(--calm)"></i>write</span></span>'+scrubReadout("dk",histSamples(),s=>fmtRate(s.diskR))+'</div>'+timeline(histSamples(),[{get:s=>s.diskR,color:"var(--acc)",area:true},{get:s=>s.diskW,color:"var(--calm)"}],{id:"dk",h:160})+'</div>'
@@ -819,6 +831,7 @@ function healthEnter(){
   const h=state.health;
   if(h.job && h.job.state==="running") healthPoll();
   if(!h.report || Date.now()-h.fetchedAt>60000) healthFetch(true); else healthScheduleRefresh();
+  if(!h.actions) healthLoadActions();
 }
 function healthLeave(){ healthClearTimers(); }
 async function healthFetch(user){
@@ -826,7 +839,7 @@ async function healthFetch(user){
   h.loading=true; h.error=null; if(user) h.refreshTries=0; healthRender();
   try{
     const r=await fetchJSON("/api/health");
-    if(r && r.verdict){ h.report=r; h.fetchedAt=Date.now(); } else h.error=(r&&r.error)||"Unexpected response";
+    if(r && r.verdict) healthSetReport(r, !user); else h.error=(r&&r.error)||"Unexpected response";
   }catch(e){ h.error="Request failed"; }
   h.loading=false; healthRender(); healthScheduleRefresh();
 }
@@ -852,7 +865,7 @@ function healthPoll(){
   h.pollT=setTimeout(async()=>{
     try{
       const j=await fetchJSON("/api/health/scan/"+h.job.id);
-      if(j && j.state){ h.job=j; if(j.state==="done" && j.report){ h.report=j.report; h.fetchedAt=Date.now(); } }
+      if(j && j.state){ h.job=j; if(j.state==="done" && j.report) healthSetReport(j.report, false); }
       else { h.job=null; h.error="The scan job is gone (did the server restart?)"; }
     }catch(e){ /* keep polling */ }
     healthRender(); healthPoll();
@@ -864,7 +877,7 @@ async function healthOnDemand(id){
   h.busy=id; h.error=null; healthRender();
   try{
     const r=await fetchJSON("/api/health/check/"+encodeURIComponent(id),{method:"POST"});
-    if(r && r.verdict){ h.report=r; h.fetchedAt=Date.now(); } else h.error=(r&&r.error)||"Unexpected response";
+    if(r && r.verdict) healthSetReport(r, false); else h.error=(r&&r.error)||"Unexpected response";
   }catch(e){ h.error="Request failed"; }
   h.busy=null; healthRender();
 }
@@ -896,22 +909,25 @@ function hFinding(f){
     +(f.asOf?'<span class="rsub" style="margin-left:auto;white-space:nowrap">as of '+esc(hAgo(f.asOf))+'</span>':'')+'</div>'
     +'<div class="rsub hdetail">'+esc(f.detail)+'</div>'
     +(ev?'<details data-hid="'+esc(fid)+'"'+(h.open.has(fid)?" open":"")+'><summary class="rsub">Evidence</summary>'+ev+'</details>':'')
-    +steps+'</div>';
+    +steps+hCmdBtn(f)+'</div>';
 }
 function hReclaim(r){
-  const h=state.health, rows=hRows(r);
-  const head='<div class="ctitle" style="margin-top:16px">RECLAIMABLE<span class="note">on-disk sizes · each path counted once</span></div>';
+  const h=state.health, rows=hRows(r), act=!!(h.actions&&h.actions.enabled);
+  const badge=(h.actions&&h.actions.sandbox)?'<span class="hsev warn" style="margin-left:8px" title="'+esc(h.actions.sandbox)+'">SANDBOX</span>':'';
+  const head='<div class="ctitle" style="margin-top:16px">RECLAIMABLE'+badge+'<span class="note">on-disk sizes · each path counted once</span></div>';
   if(!rows.length) return '<div class="card">'+head.replace(' style="margin-top:16px"','')+'<div class="rsub" style="padding:4px 0">'+(r.fullScan.at?"Nothing above the size thresholds.":"Run a full scan to survey disk clutter (~1 min, read-only)")+'</div></div>';
   rows.sort((a,b)=>(a.it.bytes-b.it.bytes)*h.sortDir);
-  const body=rows.map(x=>'<div class="hrt-r'+((x.it.safety==="keep"||!x.leaf)?" dim":"")+'"><span class="mono" style="font-size:12px">'+esc(fmtBytes(x.it.bytes))+'</span>'
+  const body=rows.map(x=>'<div class="hrt-r'+(act?" hsel":"")+((x.it.safety==="keep"||!x.leaf)?" dim":"")+'">'+(act?hSelCell(x):"")+'<span class="mono" style="font-size:12px">'+esc(fmtBytes(x.it.bytes))+'</span>'
     +'<span class="mono hpath" title="'+esc(x.it.path)+'">'+esc(hTilde(x.it.path))+'</span>'
     +'<span class="rsub" style="white-space:normal">'+esc(hLabel(x.f))+(x.it.note?' · '+esc(x.it.note):'')+(x.leaf?'':' · includes rows below')+'</span>'
     +'<span class="hsev '+(HEALTH_SAFETY[x.it.safety]||"mut")+'" style="justify-self:start">'+esc(x.it.safety)+'</span>'
     +'<span class="rsub">'+(x.it.lastModified?esc(hAgo(x.it.lastModified)):"—")+'</span></div>').join("");
   const by=r.reclaimable.byClass;
   const foot='<div class="rsub" style="padding:8px 8px 2px;white-space:normal">Total reclaimable <span class="calm" style="font-weight:700">'+esc(fmtBytes(r.reclaimable.total))+'</span> — regenerates '+esc(fmtBytes(by.regenerates))+' · orphan '+esc(fmtBytes(by.orphan))+' · ask '+esc(fmtBytes(by.ask))+' · keep '+esc(fmtBytes(by.keep))+' (not counted)</div>';
-  return '<div class="card" style="padding:6px 6px">'+head.replace(' style="margin-top:16px"',' style="padding:6px 8px 0"')
-    +'<div class="hrt-h"><button id="hsort">SIZE'+(h.sortDir<0?" ↓":" ↑")+'</button><span>PATH</span><span>WHAT</span><span>SAFE?</span><span>MODIFIED</span></div>'+body+foot+'</div>';
+  const ask=act?'<label class="hask"><input type="checkbox" id="hask"'+(h.askOn?" checked":"")+'> Include ‘ask’ items — I understand what they remove</label>':'';
+  const cmds=act?r.findings.filter(f=>f.category==="clutter"&&f.actionId).map(f=>hCmdBtn(f)?'<div class="rsub" style="padding:6px 8px 0;white-space:normal">'+esc(hLabel(f))+hCmdBtn(f)+'</div>':'').join(""):'';
+  return '<div class="card" style="padding:6px 6px">'+head.replace(' style="margin-top:16px"',' style="padding:6px 8px 0"')+ask
+    +'<div class="hrt-h'+(act?" hsel":"")+'">'+(act?'<span></span>':'')+'<button id="hsort">SIZE'+(h.sortDir<0?" ↓":" ↑")+'</button><span>PATH</span><span>WHAT</span><span>SAFE?</span><span>MODIFIED</span></div>'+body+foot+cmds+hBar(rows)+'</div>';
 }
 function rHealth(){
   const h=state.health, r=h.report; h.copies=[];
@@ -949,10 +965,108 @@ function rHealth(){
   const skipped=(r.skipped&&r.skipped.length)?'<div class="card" style="margin-top:14px"><div class="ctitle">SKIPPED<span class="note">not checked — do not read these as clean</span></div>'
     +r.skipped.map(s=>'<div class="rsub" style="padding:2px 0;white-space:normal"><span class="mono">'+esc(s.id)+'</span> · '+esc(s.reason)+'</div>').join("")+'</div>':'';
   const refreshing=(r.refreshing&&r.refreshing.length)?'<div class="rsub" style="margin-top:10px">refreshing: '+esc(r.refreshing.join(", "))+'…</div>':'';
-  return shead+banner
+  const cleaned=(h.cleaned>0)?'<div class="rsub" style="margin:-4px 2px 12px">Cleaned this month: <span class="calm" style="font-weight:700">'+esc(fmtBytes(h.cleaned))+'</span></div>':'';
+  const off=(h.actions&&!h.actions.enabled)?'<div class="rsub" style="margin:-4px 2px 12px">Clean-up actions are off: '+esc(h.actions.reason||"disabled")+'</div>':'';
+  return shead+banner+cleaned+off
     +'<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:6px">'+tiles.join("")+'</div>'
     +fsec+hReclaim(r)+skipped+refreshing;
 }
+// ---- clean-up actions: dry run -> plan shown -> one confirm -> result ----
+const hKey=(f,it)=>f.id+"|"+it.path;
+async function hPost(url,body){
+  const r=await fetch(url,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body||{})});
+  let j=null; try{ j=await r.json(); }catch(e){}
+  return { ok:r.ok, status:r.status, json:j };
+}
+// A new report clears the selection; the automatic background refresh only drops rows that no longer exist.
+function healthSetReport(r,keepSel){
+  const h=state.health; h.report=r; h.fetchedAt=Date.now();
+  if(keepSel){ const live=new Set(); r.findings.forEach(f=>(f.items||[]).forEach(it=>live.add(hKey(f,it)))); [...h.sel].forEach(k=>{ if(!live.has(k)) h.sel.delete(k); }); }
+  else h.sel.clear();
+}
+async function healthLoadActions(){
+  const h=state.health;
+  try{ const a=await fetchJSON("/api/health/actions"); if(a && typeof a.enabled==="boolean") h.actions=a; }catch(e){}
+  h.cleaned=0;
+  if(h.actions && h.actions.enabled){ try{ const l=await fetchJSON("/api/health/actions/log"); h.cleaned=(l&&l.cleanedThisMonthBytes)||0; }catch(e){} }
+  healthRender();
+}
+function hDropAsk(){ const h=state.health; if(!h.report) return; h.report.findings.forEach(f=>(f.items||[]).forEach(it=>{ if(it.safety==="ask") h.sel.delete(hKey(f,it)); })); }
+function hSelCell(x){
+  const h=state.health, a=h.actions;
+  if(!(a&&a.enabled&&x.it.actionable&&(x.it.safety==="regenerates"||x.it.safety==="orphan"||x.it.safety==="ask"))) return '<span></span>';
+  const k=hKey(x.f,x.it);
+  return '<input type="checkbox" data-hk="'+esc(k)+'" aria-label="Select '+esc(hTilde(x.it.path))+'"'+(h.sel.has(k)?" checked":"")+((x.it.safety==="ask"&&!h.askOn)?" disabled":"")+'>';
+}
+function hBar(rows){
+  const h=state.health; if(!h.sel.size) return "";
+  let n=0,b=0; rows.forEach(x=>{ if(h.sel.has(hKey(x.f,x.it))){ n++; b+=x.it.bytes; } });
+  if(!n) return "";
+  return '<div class="hbar"><span class="mono" style="font-size:12px">Move '+n+' item'+(n===1?"":"s")+' to the Trash · '+esc(fmtBytes(b))+'</span><span style="margin-left:auto;display:flex;gap:8px"><button class="btn" id="hclear">Clear</button><button class="btn acc" id="hreview">Review…</button></span></div>';
+}
+function hCmdBtn(f){
+  const a=state.health.actions; if(!a||!a.enabled||!f.actionId) return "";
+  const act=(a.actions||[]).find(x=>x.id===f.actionId&&x.method==="command"); if(!act) return "";
+  return '<div style="margin-top:6px"><button class="btn" data-hcmd="'+esc(act.id)+'">'+esc(act.title)+'…</button></div>';
+}
+async function healthPlan(actionId,targets){
+  const h=state.health;
+  h.modal={ stage:"loading" }; healthModal();
+  const r=await hPost("/api/health/action/plan", targets?{ actionId, targets }:{ actionId });
+  if(!r.ok || !r.json || !r.json.token) h.modal={ stage:"error", error:(r.json&&r.json.error)||"Request failed ("+r.status+")" };
+  else h.modal={ stage:"plan", plan:r.json, ack:false, running:false };
+  healthModal();
+}
+async function healthExecute(){
+  const h=state.health, m=h.modal; if(!m || m.stage!=="plan" || m.running) return;
+  m.running=true; healthModal();
+  const r=await hPost("/api/health/action/execute",{ token:m.plan.token, ack:m.ack });
+  if(r.ok && r.json && r.json.result){
+    h.modal={ stage:"result", result:r.json.result };
+    if(r.json.report) healthSetReport(r.json.report,false); else h.sel.clear();
+    healthLoadActions(); healthRender();
+  } else h.modal={ stage:"error", error:(r.json&&r.json.error)||"Request failed ("+r.status+")" };
+  healthModal();
+}
+function healthCloseModal(){ const h=state.health; if(h.modal && h.modal.running) return; h.modal=null; healthModal(); }
+function healthModal(){
+  const el=$("hmodal"), m=state.health.modal;
+  if(!m){ el.hidden=true; el.innerHTML=""; return; }
+  let t="", body="", foot="";
+  const cancel='<button class="btn" data-hmx'+(m.running?" disabled":"")+'>'+(m.stage==="result"||m.stage==="error"?"Close":"Cancel")+'</button>';
+  if(m.stage==="loading"){ t="Checking…"; body='<div class="rsub">Re-checking every item on disk before showing the plan…</div>'; foot=cancel; }
+  else if(m.stage==="error"){ t="Not done"; body='<div class="crit" style="white-space:normal">'+esc(m.error)+'</div>'; foot=cancel; }
+  else if(m.stage==="plan"){
+    const p=m.plan, cmd=p.method==="command";
+    t=cmd?(p.actionId==="brew-cleanup"?"Run brew cleanup":p.actionId==="thin-snapshots"?"Thin local snapshots":"Delete unavailable simulators"):"Move to the Trash";
+    const rows=p.targets.map(x=>'<div class="hmrow"><span class="mono" style="font-size:12px">'+esc(fmtBytes(x.bytes))+'</span><span class="mono hpath" title="'+esc(x.path)+'">'+esc(hTilde(x.path))+'</span><span class="hsev '+(HEALTH_SAFETY[x.safety]||"mut")+'" style="justify-self:start">'+esc(x.safety)+'</span></div>').join("");
+    const ref=p.refused.map(x=>'<div class="rsub" style="white-space:normal;padding:2px 0;opacity:.8"><span class="mono">'+esc(hTilde(x.path))+'</span> — refused: '+esc(x.reason)+'</div>').join("");
+    body=(cmd?'<div class="rsub" style="margin-bottom:4px">Command (run exactly as shown)</div><pre class="mono hpre">'+esc(p.command)+'</pre>'
+        :'<div class="rsub" style="margin-bottom:6px">Method: to the Trash — recoverable until you empty it</div>'+rows+(p.targets.length?'<div class="rsub" style="padding:6px 0 0">Total <span class="calm" style="font-weight:700">'+esc(fmtBytes(p.totalBytes))+'</span> in '+p.targets.length+' item'+(p.targets.length===1?"":"s")+' (re-measured just now)</div>':'<div class="rsub warn" style="padding:6px 0">Nothing can be moved: every item was refused.</div>'))
+      +(ref?'<div style="margin-top:8px">'+ref+'</div>':'')
+      +'<div class="rsub" style="margin-top:8px;white-space:normal">'+esc(p.explain)+'</div>'
+      +(p.needsAck?'<label class="hask" style="padding-left:0"><input type="checkbox" id="hmack"'+(m.ack?" checked":"")+'> I understand this removes things I may want back</label>':'');
+    const blocked=m.running||(p.needsAck&&!m.ack)||(!cmd&&p.targets.length===0);
+    foot=cancel+'<button class="btn acc" id="hmgo"'+(blocked?" disabled":"")+'>'+(m.running?"Working…":cmd?"Run":"Move to Trash")+'</button>';
+  } else {
+    const r=m.result; t=r.result==="ok"?"Done":r.result==="partial"?"Partly done":"Failed";
+    const lines=r.targets.map(x=>'<div class="rsub" style="white-space:normal;padding:2px 0"><span class="'+(x.ok?"calm":"crit")+'">'+(x.ok?"✓":"✗")+'</span> <span class="mono">'+esc(hTilde(x.path))+'</span>'+(x.error?' — '+esc(x.error):'')+'</div>').join("");
+    const rep=state.health.report, thin=rep && rep.vitals.localSnapshots>=1 && r.method==="trash" && state.health.actions && (state.health.actions.actions||[]).some(a=>a.id==="thin-snapshots") && rep.findings.some(f=>f.actionId==="thin-snapshots");
+    body=lines+(r.output?'<pre class="mono hpre">'+esc(r.output)+'</pre>':'')+'<div class="rsub" style="margin-top:8px;white-space:normal">'+esc(r.note)+'</div>';
+    foot=(thin?'<button class="btn" data-hthin>Thin snapshots…</button>':'')+cancel;
+  }
+  el.hidden=false;
+  el.innerHTML='<div class="hmodal card" role="dialog" aria-modal="true" aria-label="'+esc(t)+'"><h2>'+esc(t)+'</h2>'+body+'<div class="hmact">'+foot+'</div></div>';
+  el.querySelectorAll("[data-hmx]").forEach(b=>b.onclick=healthCloseModal);
+  const go=$("hmgo"); if(go) go.onclick=healthExecute;
+  const ack=$("hmack"); if(ack) ack.onchange=()=>{ m.ack=ack.checked; const g=$("hmgo"); if(g) g.disabled=!m.ack; };
+  const th=el.querySelector("[data-hthin]"); if(th) th.onclick=()=>healthPlan("thin-snapshots",null);
+  const first=el.querySelector("[data-hmx]"); if(first && !first.disabled) first.focus(); // the safe choice has the focus
+}
+$("hmodal").addEventListener("mousedown",(e)=>{ if(e.target===$("hmodal")) healthCloseModal(); });
+// While the dialog is open it owns the keyboard: Escape closes it, no global shortcut fires underneath.
+document.addEventListener("keydown",(e)=>{ if(!state.health.modal) return; if(e.key==="Escape"){ e.preventDefault(); healthCloseModal(); } e.stopImmediatePropagation(); },true);
+
 function bindHealth(){
   const h=state.health, on=(id,fn)=>{ const el=$(id); if(el) el.onclick=fn; };
   on("hrecheck",()=>healthFetch(true)); on("hscan",healthScan);
@@ -963,6 +1077,13 @@ function bindHealth(){
   $("view").querySelectorAll("[data-hod]").forEach(b=>b.onclick=()=>healthOnDemand(b.dataset.hod));
   $("view").querySelectorAll("[data-hcopy]").forEach(b=>b.onclick=()=>{ navigator.clipboard.writeText(h.copies[+b.dataset.hcopy]||"").then(()=>toast("Steps copied")); });
   $("view").querySelectorAll("details[data-hid]").forEach(d=>{ d.ontoggle=()=>{ if(d.open) h.open.add(d.dataset.hid); else h.open.delete(d.dataset.hid); }; });
+  // clean-up: nothing is ever pre-selected; selection lives in h.sel and survives re-renders
+  $("view").querySelectorAll("input[data-hk]").forEach(c=>c.onchange=()=>{ if(c.checked) h.sel.add(c.dataset.hk); else h.sel.delete(c.dataset.hk); h.focusKey=c.dataset.hk; render(); });
+  const ask=$("hask"); if(ask) ask.onchange=()=>{ h.askOn=ask.checked; if(!h.askOn) hDropAsk(); render(); };
+  on("hclear",()=>{ h.sel.clear(); render(); });
+  on("hreview",()=>healthPlan("trash-paths",[...h.sel].map(k=>{ const i=k.indexOf("|"); return { findingId:k.slice(0,i), path:k.slice(i+1) }; })));
+  $("view").querySelectorAll("[data-hcmd]").forEach(b=>b.onclick=()=>healthPlan(b.dataset.hcmd,null));
+  if(h.focusKey){ const c=[...$("view").querySelectorAll("input[data-hk]")].find(e=>e.dataset.hk===h.focusKey); if(c) c.focus(); h.focusKey=null; }
 }
 
 // ---------- view bindings (post-render) ----------
