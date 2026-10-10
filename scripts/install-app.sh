@@ -89,7 +89,9 @@ LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServic
 [ -x "$LSREG" ] && "$LSREG" -f "$TARGET" >/dev/null 2>&1 || true
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$TARGET/Contents/Info.plist" 2>/dev/null || echo '?')"
-if codesign -dvv "$TARGET" 2>&1 | grep -q "^Authority=Developer ID Application"; then KIND="notarized release"; else KIND="ad-hoc local build"; fi
+# Capture first: with pipefail, `codesign | grep -q` fails when grep exits early.
+SIG="$(codesign -dvv "$TARGET" 2>&1 || true)"
+if grep -q "^Authority=Developer ID Application" <<<"$SIG"; then KIND="Developer ID signed"; else KIND="ad-hoc local build"; fi
 echo "✓ Installed Process Detective $VERSION ($KIND) → $TARGET"
 echo "  Launch now:  open \"$TARGET\"   (or double-click it in Finder)"
 echo "  Spotlight:   ⌘Space → 'Process Detective'  (after macOS indexes it / first launch)"
