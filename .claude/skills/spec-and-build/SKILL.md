@@ -19,10 +19,12 @@ skip the verify step — a subagent's "all clean" is a claim, not proof.
    - **Goal & architecture**, **data model / types**, **files to create/modify**,
      **endpoints**, **UI integration**, **config**.
    - **Tests** to add (with fixtures) and the requirement that existing tests stay green.
+     Point the builder at the `tdd` skill: Red → Green → Mutate, sanitized fixtures,
+     no dependence on this Mac (`$HOME`, running processes, clock).
    - **Acceptance criteria** as concrete, runnable commands (typecheck, build,
      test, and a manual smoke sequence with expected outputs).
    - **Constraints & non-goals** (read-only, no sudo, graceful degradation, etc.).
-   - An explicit **"do NOT deploy — implement, verify locally, then STOP and report."**
+   - An explicit **"do NOT commit, push, release or deploy — implement, verify locally, then STOP and report."**
    - **Deliverables to report**: files changed, verification outputs, deviations,
      follow-ups.
 
@@ -30,7 +32,7 @@ skip the verify step — a subagent's "all clean" is a claim, not proof.
    `subagent_type: general-purpose`, `model: sonnet`, `run_in_background: true`.
    The prompt: read `docs/<slug>-spec.md` in full and implement it exactly; orient
    in the codebase first; match conventions; verify rigorously per the acceptance
-   criteria; **do not deploy or ssh anywhere**; report back files changed +
+   criteria; **do not commit, push, release, deploy or ssh anywhere**; report back files changed +
    verification outputs + deviations + recommended follow-up.
 
 3. **Tell the user it's running and end the turn.** A completion notification
@@ -42,9 +44,11 @@ skip the verify step — a subagent's "all clean" is a claim, not proof.
    (e.g. an endpoint returns a fallback value), run it down with a controlled
    test rather than hand-waving — past bugs hid behind plausible-looking output.
 
-5. **If clean, deploy to both Macs** with the `deploy` skill
-   (`npm run deploy -- --remote=waldomacmini1`). If not clean, fix directly or
-   relaunch the agent (SendMessage to resume it) with precise corrections.
+5. **If clean, ship it:** commit on `main`, push, wait for CI to go green (`ci`
+   skill), cut a release (`ship` skill — CI signs and notarizes it), then install it
+   on both Macs (`deploy` skill). Deploy installs the *release*, so skipping `ship`
+   would reinstall the previous version. If not clean, fix directly or relaunch the
+   agent (SendMessage to resume it) with precise corrections.
 
 ## Notes
 

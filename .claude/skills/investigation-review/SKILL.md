@@ -54,8 +54,9 @@ app changes → recommend → (on go-ahead) spec-and-build → verify → deploy
    elevated feature; ship-now-lean vs everything).
 
 6. **On go-ahead, hand to `spec-and-build`** — write the spec to
-   `docs/<slug>-spec.md`, launch a background Sonnet agent, independently verify, and
-   deploy to both Macs (`npm run deploy -- --remote=waldomacmini1`). Don't collapse
+   `docs/<slug>-spec.md`, launch a background Sonnet agent, independently verify, then
+   commit + push (CI green, `ci` skill), release (`ship` skill) and install on both
+   Macs (`deploy` skill). Don't collapse
    the model split: spec + verify here, build in Sonnet.
 
 ## Notes
