@@ -34,7 +34,7 @@ export function fakeSystem(patch: Partial<SystemStats> = {}): SystemStats {
     },
     processes: { total: 500, running: 3, threads: 3000 },
     memory: {
-      totalBytes: 128 * 1024 ** 3, usedBytes: 40 * 1024 ** 3, usedPct: 31, pressure: 'normal',
+      totalBytes: 128 * 1024 ** 3, usedBytes: 40 * 1024 ** 3, usedPct: 31, pressure: 'normal', kernelFreePct: 70,
       cachedBytes: 0, segments: [], swap: { totalBytes: 0, usedBytes: 0 },
     },
     network: {

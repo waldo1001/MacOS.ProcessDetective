@@ -4,9 +4,29 @@
     {
       "name": "process-detective",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["dist/index.js", "serve", "--no-open", "--no-history", "--port", "7941"],
+      "runtimeArgs": [
+        "dist/index.js",
+        "serve",
+        "--no-open",
+        "--no-history",
+        "--port",
+        "7941"
+      ],
       "port": 7941,
       "url": "http://127.0.0.1:7941"
+    },
+    {
+      "name": "process-detective-history",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "dist/index.js",
+        "serve",
+        "--no-open",
+        "--port",
+        "7942"
+      ],
+      "port": 7942,
+      "url": "http://127.0.0.1:7942"
     }
   ]
 }

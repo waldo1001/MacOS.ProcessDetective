@@ -15,6 +15,8 @@ export interface SystemStats {
   memory: {
     totalBytes: number; usedBytes: number; usedPct: number;
     pressure: 'normal' | 'warning' | 'critical' | 'unknown';
+    /** `kern.memorystatus_level`: the kernel's free-memory percent (what `memory_pressure` reports); null when unreadable. */
+    kernelFreePct: number | null;
     cachedBytes: number; segments: MemSegment[];
     swap: { totalBytes: number; usedBytes: number };
   };
@@ -219,7 +221,7 @@ const PRESSURE: Record<string, SystemStats['memory']['pressure']> = {
 export async function collectSystem(): Promise<SystemStats> {
   const [top, sc, perf, vm, swap, df, netib, netan, batt, therm, lsofL] = await Promise.all([
     run('top', ['-l1', '-n0']),
-    run('sysctl', ['-n', 'vm.loadavg', 'hw.ncpu', 'hw.physicalcpu', 'hw.memsize', 'hw.model', 'machdep.cpu.brand_string', 'kern.boottime', 'kern.memorystatus_vm_pressure_level']),
+    run('sysctl', ['-n', 'vm.loadavg', 'hw.ncpu', 'hw.physicalcpu', 'hw.memsize', 'hw.model', 'machdep.cpu.brand_string', 'kern.boottime', 'kern.memorystatus_vm_pressure_level', 'kern.memorystatus_level']),
     run('sysctl', ['-n', 'hw.perflevel0.logicalcpu', 'hw.perflevel1.logicalcpu']),
     run('vm_stat', []),
     run('sysctl', ['-n', 'vm.swapusage']),
@@ -244,6 +246,8 @@ export async function collectSystem(): Promise<SystemStats> {
   const chip = sl[5] || 'CPU';
   const uptimeSeconds = bootSeconds(sl[6] || '');
   const pressure = PRESSURE[(sl[7] || '').trim()] ?? 'unknown';
+  const lvl = parseInt(sl[8] || '', 10);
+  const kernelFreePct = Number.isFinite(lvl) && lvl >= 0 && lvl <= 100 ? lvl : null;
 
   const pl = perf.stdout.split('\n');
   const performance = parseInt(pl[0] || '0', 10) || 0;
@@ -253,16 +257,20 @@ export async function collectSystem(): Promise<SystemStats> {
   const px = (k: string) => (pages[k] ?? 0) * pageSize;
   const wired = px('pages wired down');
   const compressed = px('pages occupied by compressor');
-  const active = px('pages active');
-  const inactive = px('pages inactive');
-  const cachedBytes = px('file-backed pages');
-  const usedBytes = wired + compressed + active + inactive;
-  const freeBytes = Math.max(0, memBytes - usedBytes);
+  const purgeable = px('pages purgeable');
+  // Activity Monitor's model: Used = App (anonymous − purgeable) + Wired + Compressed;
+  // Cached = file-backed + purgeable. Inactive pages are reclaimable and NOT used —
+  // counting them (the old active + inactive sum) pinned "used" near 100 % forever.
+  // anonymous + file-backed == active + inactive + speculative, so the slices tile RAM.
+  const app = Math.max(0, px('anonymous pages') - purgeable);
+  const cachedBytes = px('file-backed pages') + purgeable;
+  const usedBytes = wired + compressed + app;
+  const freeBytes = Math.max(0, memBytes - usedBytes - cachedBytes);
   const segments: MemSegment[] = [
     { label: 'Wired', bytes: wired },
     { label: 'Compressed', bytes: compressed },
-    { label: 'Active', bytes: active },
-    { label: 'Inactive', bytes: inactive },
+    { label: 'App', bytes: app },
+    { label: 'Cached', bytes: cachedBytes },
     { label: 'Free', bytes: freeBytes },
   ];
 
@@ -307,7 +315,7 @@ export async function collectSystem(): Promise<SystemStats> {
     processes: { total: t.total, running: t.running, threads: t.threads },
     memory: {
       totalBytes: memBytes, usedBytes, usedPct: memBytes ? (usedBytes / memBytes) * 100 : 0,
-      pressure, cachedBytes, segments, swap: parseSwap(swap.stdout),
+      pressure, kernelFreePct, cachedBytes, segments, swap: parseSwap(swap.stdout),
     },
     network: {
       rxBytesPerSec: rxRate, txBytesPerSec: txRate,

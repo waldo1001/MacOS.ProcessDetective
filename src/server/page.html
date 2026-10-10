@@ -187,7 +187,7 @@ const SECTIONS = [
   { id:"health", label:"Health", key:"h", icon:'<path d="M8 13.5S2 10 2 5.8A3 3 0 0 1 8 4.4 3 3 0 0 1 14 5.8C14 10 8 13.5 8 13.5Z"/><path d="M3 8h2.6l1.2-2.2 2 4.4 1.2-2.2H13"/>' },
 ];
 const WEB_PORTS = new Set([3000,3001,4200,5000,5173,5174,8000,8080,8081,9000]);
-const MEM_COLORS = { Wired:"var(--acc)", Active:"#2a8aa0", Compressed:"var(--warn)", Inactive:"#3a5566", Free:"var(--surf2)" };
+const MEM_COLORS = { Wired:"var(--acc)", App:"#2a8aa0", Compressed:"var(--warn)", Cached:"#3a5566", Free:"var(--surf2)" };
 const INTERVALS = [1000, 2000, 5000];
 const BG_INTERVAL = 8000;          // slower sampling while the window is hidden
 const RELOAD_AFTER = 86400000;     // self-heal: reload after 24h, only while hidden
@@ -273,10 +273,15 @@ function pathFor(samples, getV, W, Hh, maxV){
   const n=samples.length, max=maxV||Math.max(1, ...samples.filter(s=>!s.gap).map(getV));
   let segs=[], cur=[];
   // Break the line on explicit gap markers (resume-after-pause) or a real time
-  // jump >25s (sleep/suspend) — NOT on slow background sampling.
+  // jump (sleep/suspend) — NOT on slow background sampling. The threshold scales
+  // with the series' own step: downsampled server history (6h ≈ 36s, 24h ≈ 144s
+  // per point) would otherwise break at every point and draw nothing.
+  const dts=[]; for(let i=1;i<n;i++){ if(!samples[i].gap && !samples[i-1].gap) dts.push(samples[i].t-samples[i-1].t); }
+  dts.sort((a,b)=>a-b);
+  const gapMs=Math.max(25000, 3*(dts.length?dts[dts.length>>1]:0));
   for(let i=0;i<n;i++){
     const s=samples[i];
-    if(s.gap || (i>0 && (s.t - samples[i-1].t) > 25000)){ if(cur.length){segs.push(cur);cur=[];} if(s.gap) continue; }
+    if(s.gap || (i>0 && (s.t - samples[i-1].t) > gapMs)){ if(cur.length){segs.push(cur);cur=[];} if(s.gap) continue; }
     const x = n===1?0:(i/(n-1))*W;
     const y = Hh - clamp(getV(s)/max,0,1)*Hh;
     cur.push([x,y]);
@@ -531,7 +536,7 @@ function memDonut(groups){
     a=a1; });
   return '<svg width="184" height="184" viewBox="0 0 184 184">'+segs
     +'<text x="92" y="88" text-anchor="middle" class="mono" fill="var(--tx)" font-size="22" font-weight="700">'+total.toFixed(0)+'%</text>'
-    +'<text x="92" y="106" text-anchor="middle" fill="var(--mut)" font-size="10">of RAM</text></svg>';
+    +'<text x="92" y="106" text-anchor="middle" fill="var(--mut)" font-size="10">summed RSS</text></svg>';
 }
 
 function rMemory(){
@@ -543,13 +548,13 @@ function rMemory(){
   return '<div class="shead"><h1>Memory</h1><span class="meta">'+fmtBytes(m.usedBytes)+' used of '+fmtBytes(m.totalBytes)+'</span></div>'
     +'<div class="grid" style="grid-template-columns:1.4fr 1fr;margin-bottom:10px">'
       +'<div class="card"><div class="ctitle">COMPOSITION</div><div class="bar" style="height:24px;border-radius:7px">'+segs+'</div><div class="legend">'+leg+'</div></div>'
-      +'<div class="card"><div class="ctitle">MEMORY PRESSURE</div><span class="big '+pw+'">'+m.usedPct.toFixed(0)+'%</span> <span class="'+pw+'" style="font:600 12px var(--mono)">'+m.pressure.toUpperCase()+'</span>'
-        +'<div class="bar" style="margin:9px 0"><span style="width:'+m.usedPct+'%;background:var(--'+pw+')"></span></div>'
+      +'<div class="card"><div class="ctitle">MEMORY PRESSURE</div>'+(m.kernelFreePct==null?'':'<span class="big '+pw+'">'+m.kernelFreePct+'%</span> <span class="rsub">free · </span>')+'<span class="'+pw+'" style="font:600 12px var(--mono)">'+m.pressure.toUpperCase()+'</span>'
+        +'<div class="bar" style="margin:9px 0"><span style="width:'+(m.kernelFreePct==null?0:100-m.kernelFreePct)+'%;background:var(--'+pw+')"></span></div>'
         +'<div class="kv"><span class="k">Swap</span><span class="v">'+fmtBytes(m.swap.usedBytes)+' / '+fmtBytes(m.swap.totalBytes)+'</span><span class="k">Cached</span><span class="v">'+fmtBytes(m.cachedBytes)+'</span></div></div>'
     +'</div>'
     +(()=>{ const groups=memGroups(); const rem=Math.max(0, m.usedPct-groups.reduce((s,g)=>s+g.mem,0)); if(rem>0.5)groups.push({label:"System / wired / cached",mem:rem,n:0,sys:true});
       const legend=groups.map((g,i)=>{ const col=g.sys?"#2a3344":GROUP_COLORS[i%GROUP_COLORS.length]; const sub=g.sys?"wired · compressed · cache":(g.n+" proc"+(g.n>1?"s":"")); return '<div class="row" style="cursor:'+(g.sys?"default":"pointer")+';padding:5px 4px"'+(g.sys?"":' data-grp="'+esc(g.label)+'"')+'><span class="dot7" style="border-radius:3px;background:'+col+'"></span><span class="nm">'+esc(g.label)+'</span><span class="rsub" style="margin-left:6px">'+sub+'</span><span class="val">'+g.mem.toFixed(1)+'% · '+fmtBytes(g.mem/100*total)+'</span></div>'; }).join("");
-      return '<div class="card" style="margin-bottom:10px"><div class="ctitle">MEMORY BY PROCESS GROUP<span class="note">click a group to filter the process list</span></div>'
+      return '<div class="card" style="margin-bottom:10px"><div class="ctitle">MEMORY BY PROCESS GROUP<span class="note">RSS counts shared pages in every process, so groups can add up past “used” · click a group to filter</span></div>'
         +'<div style="display:flex;gap:22px;align-items:center;flex-wrap:wrap"><div>'+memDonut(groups)+'</div><div style="flex:1;min-width:260px">'+legend+'</div></div></div>'; })()
     +'<div class="card" data-scrub="mem-u" style="margin-bottom:10px"><div class="ctitle">USED MEMORY · '+(state.range==="15m"?"LAST 15 MIN":"LAST "+state.range.toUpperCase())+scrubReadout("mem-u",histSamples(),s=>s.mem.toFixed(1),"%")+'</div>'+timeline(histSamples(),[{get:s=>s.mem,color:"var(--acc)",area:true}],{id:"mem-u",h:160,max:100})+'</div>'
     +'<div class="card"><div class="ctitle">TOP BY MEMORY</div>'+top.map(p=>procRow(p,'<span class="val">'+p.mem.toFixed(1)+'%</span>')).join("")+'</div>';
@@ -902,11 +907,14 @@ function hRows(r){
 }
 function hFinding(f){
   const h=state.health, sv=HEALTH_SEV[f.severity]||HEALTH_SEV.info, fid=f.id+"#ev";
+  // A cached result of an on-demand check never refreshes by itself (it costs a Touch ID prompt): offer the re-run right here.
+  const od=f.asOf && h.report && (h.report.onDemand||[]).find(o=>o.id===f.checkId);
   const ev=(f.evidence||[]).map(e=>'<div class="mono hcmd">$ '+esc(e.command)+'</div>'+(e.excerpt?'<pre class="mono hpre">'+esc(e.excerpt)+'</pre>':'')).join("");
   let steps="";
   if(f.manualSteps && f.manualSteps.length){ h.copies.push(f.manualSteps.join("\n")); steps='<div class="hsteps"><pre class="mono hpre">'+esc(f.manualSteps.join("\n"))+'</pre><button class="btn" data-hcopy="'+(h.copies.length-1)+'">Copy steps</button></div>'; }
   return '<div class="card hf'+(f.severity==="info"?" hinfo":"")+'"><div class="hf-top"><span class="hsev '+sv[1]+'">'+sv[0]+'</span><span class="nm">'+esc(f.title)+'</span>'
-    +(f.asOf?'<span class="rsub" style="margin-left:auto;white-space:nowrap">as of '+esc(hAgo(f.asOf))+'</span>':'')+'</div>'
+    +(f.asOf?'<span class="rsub" style="margin-left:auto;white-space:nowrap">as of '+esc(hAgo(f.asOf))+'</span>':'')
+    +(od?'<button class="btn" style="padding:3px 9px;font-size:11px" title="'+esc(od.note)+'" data-hod="'+esc(od.id)+'"'+(h.busy?' disabled':'')+'>'+(h.busy===od.id?'Waiting…':'Re-check')+'</button>':'')+'</div>'
     +'<div class="rsub hdetail">'+esc(f.detail)+'</div>'
     +(ev?'<details data-hid="'+esc(fid)+'"'+(h.open.has(fid)?" open":"")+'><summary class="rsub">Evidence</summary>'+ev+'</details>':'')
     +steps+hCmdBtn(f)+'</div>';
@@ -961,7 +969,7 @@ function rHealth(){
   ];
   const byCat={}; r.findings.forEach(f=>{ (byCat[f.category]=byCat[f.category]||[]).push(f); });
   const odCat={}; (r.onDemand||[]).forEach(o=>{ (odCat[o.category]=odCat[o.category]||[]).push(o); });
-  const fsec=HEALTH_CATS.filter(c=>byCat[c[0]]||odCat[c[0]]).map(c=>'<div class="ctitle" style="margin-top:14px">'+c[1].toUpperCase()+'</div>'+(byCat[c[0]]||[]).map(hFinding).join("")+(odCat[c[0]]||[]).map(hOnDemand).join("")).join("");
+  const fsec=HEALTH_CATS.filter(c=>byCat[c[0]]||odCat[c[0]]).map(c=>'<div class="ctitle" style="margin-top:14px">'+c[1].toUpperCase()+'</div>'+(odCat[c[0]]||[]).map(hOnDemand).join("")+(byCat[c[0]]||[]).map(hFinding).join("")).join("");
   const skipped=(r.skipped&&r.skipped.length)?'<div class="card" style="margin-top:14px"><div class="ctitle">SKIPPED<span class="note">not checked — do not read these as clean</span></div>'
     +r.skipped.map(s=>'<div class="rsub" style="padding:2px 0;white-space:normal"><span class="mono">'+esc(s.id)+'</span> · '+esc(s.reason)+'</div>').join("")+'</div>':'';
   const refreshing=(r.refreshing&&r.refreshing.length)?'<div class="rsub" style="margin-top:10px">refreshing: '+esc(r.refreshing.join(", "))+'…</div>':'';
