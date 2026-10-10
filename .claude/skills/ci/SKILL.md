@@ -7,8 +7,8 @@ description: Check and repair Process Detective's GitHub Actions CI (typecheck, 
 
 Workflow: `.github/workflows/ci.yml` on every push to `main` and every PR —
 `npm ci` → `npm run typecheck` → `npm test` → `scripts/build-app.sh` (ad-hoc) →
-smoke run of the bundled Node → ad-hoc zip as an artifact (7 days).
-Runner: `macos-latest` (Apple Silicon), Node 20, user `runner` (`HOME=/Users/runner`).
+smoke run of real CLI commands on the bundled Node → ad-hoc zip as an artifact (7 days).
+Runner: `macos-latest` (Apple Silicon), Node from `.nvmrc` (24), user `runner` (`HOME=/Users/runner`).
 
 ## Status
 

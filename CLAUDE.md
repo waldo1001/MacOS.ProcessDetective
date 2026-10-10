@@ -22,6 +22,9 @@ testing unreleased code and must be called out as such).
 
 ## Rules
 
+- Node 24 (`.nvmrc`): it is the runtime bundled into the app, and dependencies need
+  >= 22.12. The shell's nvm default may be older — run `source ~/.nvm/nvm.sh && nvm use`
+  in the project so tests run on the CI version. `build-app.sh` picks the `.nvmrc` Node from nvm itself.
 - Work on `main`; small commits. Push and release only when the user wants it shipped.
 - Tests must pass on a clean CI runner (`HOME=/Users/runner`, nothing running):
   no real home paths, no live machine state, no wall clock. Fixtures are sanitized

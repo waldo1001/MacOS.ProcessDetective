@@ -21,11 +21,25 @@ if [ "${PD_LOCK_HELD:-0}" != "1" ]; then
   . "$ROOT/scripts/_lock.sh"
   acquire_lock "$ROOT"
 fi
-NODE="${PD_NODE:-$(command -v node || true)}"
+# Node to bundle: PD_NODE, else the .nvmrc version from nvm if installed, else PATH.
+NODE="${PD_NODE:-}"
+if [ -z "$NODE" ] && [ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]; then
+  NODE="$(. "${NVM_DIR:-$HOME/.nvm}/nvm.sh" >/dev/null 2>&1; nvm which "$(cat "$ROOT/.nvmrc")" 2>/dev/null || true)"
+fi
+[ -n "$NODE" ] || NODE="$(command -v node || true)"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 VERSION="$(node -p "require('./package.json').version")"
 
 if [ -z "$NODE" ]; then echo "error: node not found on PATH" >&2; exit 1; fi
+# The bundled runtime must be the project's Node major (.nvmrc) — dependencies
+# such as commander need >= 22.12, and the release build uses the same version.
+WANT="$(tr -dc '0-9' < "$ROOT/.nvmrc")"
+HAVE="$("$NODE" -p 'process.versions.node.split(".")[0]')"
+if [ "$HAVE" != "$WANT" ]; then
+  echo "error: would bundle Node $("$NODE" -v) but the project uses Node $WANT (.nvmrc)." >&2
+  echo "  Run 'nvm use' in the project (or set PD_NODE=/path/to/node$WANT) and retry." >&2
+  exit 1
+fi
 if ! command -v swiftc >/dev/null; then echo "error: swiftc not found (install Xcode Command Line Tools)" >&2; exit 1; fi
 
 echo "› Compiling TypeScript…"

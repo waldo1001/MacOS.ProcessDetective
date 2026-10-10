@@ -60,8 +60,8 @@ for the build machine's architecture (both arm64 here).
 `npm run app` compiles the TypeScript, bundles it with its runtime deps and a
 small Swift launcher into `ProcessDetective.app`, and clears the quarantine flag.
 The app starts a localhost-only server on a free port, shows the **Mission
-Control** dashboard, and shuts the server down when you quit. Requires Node and
-the Xcode Command Line Tools (`xcode-select --install`).
+Control** dashboard, and shuts the server down when you quit. Requires Node 24 (`.nvmrc`; it is
+copied into the bundle) and the Xcode Command Line Tools (`xcode-select --install`).
 
 The dashboard ("Mission Control") has a sidebar with eight sections — **Overview,
 CPU, Memory, Energy, Disk, Network, Processes, Health** — plus a **Process detail**

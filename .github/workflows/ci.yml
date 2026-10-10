@@ -16,14 +16,14 @@ permissions:
 jobs:
   test:
     name: Typecheck, test, build app
-    runs-on: macos-latest   # Apple Silicon; the app bundles this runner's Node (arm64)
+    runs-on: macos-latest   # Apple Silicon; the app bundles this runner's Node (.nvmrc, arm64)
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci --no-audit --no-fund
@@ -36,8 +36,15 @@ jobs:
       - name: Build app bundle (ad-hoc)
         run: bash scripts/build-app.sh
 
+      # Real commands, not just --help: option parsing, the ps collector and the
+      # health registry all have to load and run on the bundled Node.
       - name: Smoke test the bundled runtime
-        run: ProcessDetective.app/Contents/MacOS/node ProcessDetective.app/Contents/Resources/app/dist/index.js --help
+        run: |
+          pd() { ProcessDetective.app/Contents/MacOS/node ProcessDetective.app/Contents/Resources/app/dist/index.js "$@"; }
+          pd --help >/dev/null
+          pd top -n 3
+          pd inspect $$
+          pd clean --list
 
       - name: Zip app
         run: ditto -c -k --keepParent ProcessDetective.app ProcessDetective-adhoc.zip
