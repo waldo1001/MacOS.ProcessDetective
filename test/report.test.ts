@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { collectionStatus, generateReport } from '../src/report/report.js';
 import { parentChain, buildTree } from '../src/tree/build.js';
 import type { Enrichment, RawProcess } from '../src/types.js';
@@ -180,7 +180,13 @@ describe('generateReport — new sections', () => {
         note: null,
       },
     });
-    const report = generateReport(node, enr);
+    vi.stubEnv('HOME', '/Users/waldo'); // homePath() abbreviates against $HOME; pin it so CI matches
+    let report: string;
+    try {
+      report = generateReport(node, enr);
+    } finally {
+      vi.unstubAllEnvs();
+    }
     expect(report).toContain('Read activity (2 lsof snapshots, 1500ms apart):');
     expect(report).toContain('fds: 193 → 191');
     expect(report).toContain('Active under: ~/.claude/projects/demo');
