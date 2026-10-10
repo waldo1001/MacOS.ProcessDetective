@@ -1,26 +1,37 @@
 #!/usr/bin/env bash
 # Deploy Process Detective.app to another Mac over SSH (e.g. a Mac mini on Tailscale).
-# Rsyncs the bundle (which carries its own Node runtime), then on the remote:
+# Uses the latest GitHub release (signed + notarized) unless told otherwise, rsyncs
+# the bundle (which carries its own Node runtime), then on the remote:
 # clears quarantine, re-signs ad-hoc (only if the build is not Developer ID
 # signed), and registers with Launch Services.
 #
-#   bash scripts/deploy-remote.sh waldomacmini1
-#   bash scripts/deploy-remote.sh user@100.69.33.109 --no-build
+#   bash scripts/deploy-remote.sh waldomacmini1                 # latest release
+#   bash scripts/deploy-remote.sh waldomacmini1 --tag=v0.1.1
+#   bash scripts/deploy-remote.sh waldomacmini1 --local-build   # ad-hoc build of this checkout
+#   bash scripts/deploy-remote.sh <user@host> --no-build        # push ./ProcessDetective.app as-is
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-HOST="${1:?usage: deploy-remote.sh <user@host | tailscale-name> [--no-build]}"
-BUILD=1
-for a in "${@:2}"; do [ "$a" = "--no-build" ] && BUILD=0; done
+HOST="${1:?usage: deploy-remote.sh <user@host | tailscale-name> [--tag=vX.Y.Z | --local-build | --no-build]}"
+SOURCE=release
+TAG=""
+for a in "${@:2}"; do
+  case "$a" in
+    --no-build)    SOURCE=existing ;;
+    --local-build) SOURCE=local ;;
+    --tag=*)       TAG="${a#--tag=}" ;;
+    *) echo "unknown arg: $a" >&2; exit 2 ;;
+  esac
+done
 
-# Only lock when we are going to rebuild — install-app.sh already holds the lock
+# Only lock when we replace the bundle — install-app.sh already holds the lock
 # when it calls us with --no-build, and re-acquiring it would deadlock.
-if [ "$BUILD" = 1 ]; then
+if [ "$SOURCE" != existing ]; then
   . "$ROOT/scripts/_lock.sh"
   acquire_lock "$ROOT"
-export PD_LOCK_HELD=1
-  bash scripts/build-app.sh
+  export PD_LOCK_HELD=1
+  if [ "$SOURCE" = local ]; then bash scripts/build-app.sh; else bash scripts/fetch-release.sh ${TAG:+"$TAG"}; fi
 fi
 APP="$ROOT/ProcessDetective.app"
 [ -d "$APP" ] || { echo "error: $APP not found." >&2; exit 1; }

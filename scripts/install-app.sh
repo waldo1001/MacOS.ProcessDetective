@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # Install Process Detective.app into an Applications folder so it's launchable
-# from Spotlight / Launchpad. Local + ad-hoc signed — no App Store, no notarization.
+# from Spotlight / Launchpad. By default the app is the signed + notarized build
+# from the latest GitHub release (built by CI); nothing is compiled locally.
 #
-#   bash scripts/install-app.sh              # → ~/Applications (no admin needed)
-#   bash scripts/install-app.sh --system     # → /Applications  (folder must be writable)
-#   bash scripts/install-app.sh --dest=/path # → a custom folder
-#   bash scripts/install-app.sh --no-build   # skip rebuild, install the existing bundle
+#   bash scripts/install-app.sh                # latest release → ~/Applications
+#   bash scripts/install-app.sh --tag=v0.1.1   # a specific release
+#   bash scripts/install-app.sh --local-build  # build ad-hoc from this checkout (unreleased code)
+#   bash scripts/install-app.sh --no-build     # install the existing ./ProcessDetective.app as-is
+#   bash scripts/install-app.sh --system       # → /Applications  (folder must be writable)
+#   bash scripts/install-app.sh --dest=/path   # → a custom folder
+#   bash scripts/install-app.sh --remote=host  # also push the same bundle to another Mac
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,23 +22,31 @@ acquire_lock "$ROOT"
 export PD_LOCK_HELD=1
 
 DEST="$HOME/Applications"
-BUILD=1
+SOURCE=release
+TAG=""
 REMOTES=()
 for a in "$@"; do
   case "$a" in
     --system)    DEST="/Applications" ;;
     --dest=*)    DEST="${a#--dest=}" ;;
     --remote=*)  REMOTES+=("${a#--remote=}") ;;
-    --no-build)  BUILD=0 ;;
+    --tag=*)     TAG="${a#--tag=}" ;;
+    --local-build) SOURCE=local ;;
+    --no-build)  SOURCE=existing ;;
     *) echo "unknown arg: $a" >&2; exit 2 ;;
   esac
 done
 
-if [ ! -d node_modules ]; then echo "› Installing npm dependencies…"; npm install >/dev/null; fi
-if [ "$BUILD" = 1 ]; then bash scripts/build-app.sh; fi
+case "$SOURCE" in
+  release)
+    bash scripts/fetch-release.sh ${TAG:+"$TAG"} ;;
+  local)
+    if [ ! -d node_modules ]; then echo "› Installing npm dependencies…"; npm install >/dev/null; fi
+    bash scripts/build-app.sh ;;
+esac
 
 APP="$ROOT/ProcessDetective.app"
-[ -d "$APP" ] || { echo "error: $APP not found — build it first (drop --no-build)." >&2; exit 1; }
+[ -d "$APP" ] || { echo "error: $APP not found — drop --no-build to fetch the latest release." >&2; exit 1; }
 
 mkdir -p "$DEST"
 if [ ! -w "$DEST" ]; then
@@ -76,7 +88,9 @@ xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null || true
 LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 [ -x "$LSREG" ] && "$LSREG" -f "$TARGET" >/dev/null 2>&1 || true
 
-echo "✓ Installed Process Detective → $TARGET"
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$TARGET/Contents/Info.plist" 2>/dev/null || echo '?')"
+if codesign -dvv "$TARGET" 2>&1 | grep -q "^Authority=Developer ID Application"; then KIND="notarized release"; else KIND="ad-hoc local build"; fi
+echo "✓ Installed Process Detective $VERSION ($KIND) → $TARGET"
 echo "  Launch now:  open \"$TARGET\"   (or double-click it in Finder)"
 echo "  Spotlight:   ⌘Space → 'Process Detective'  (after macOS indexes it / first launch)"
 

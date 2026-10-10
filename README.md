@@ -27,14 +27,18 @@ open ProcessDetective.app
 shows up in Spotlight/Launchpad):
 
 ```bash
-npm run deploy               # → ~/Applications  (no admin needed)
-npm run deploy -- --system   # → /Applications   (folder must be writable)
+npm run deploy                      # latest GitHub release → ~/Applications (no admin needed)
+npm run deploy -- --tag=v0.1.1      # a specific release
+npm run deploy -- --system          # → /Applications (folder must be writable)
+npm run deploy -- --local-build     # ad-hoc build of this checkout (unreleased changes)
 open ~/Applications/ProcessDetective.app
 ```
 
-`npm run deploy` rebuilds, ad-hoc signs, copies the app into the destination,
-clears quarantine, and registers it with Launch Services. Re-run it any time to
-update. There's also a `/deploy` Claude Code skill (`.claude/skills/deploy/`) that
+`npm run deploy` downloads the signed + notarized app that CI built for the latest
+GitHub release, verifies the checksum, the Developer ID signature, the stapled
+notarization ticket and Gatekeeper, then copies it into the destination and
+registers it with Launch Services. Re-run it any time to update. Releases are cut
+with `npm run ship` (see [docs/RELEASING.md](docs/RELEASING.md)). There's also a `/deploy` Claude Code skill (`.claude/skills/deploy/`) that
 runs this flow. Launch by path or Finder works immediately; Spotlight /
 `open -a "Process Detective"` works once macOS finishes indexing the app.
 
@@ -45,8 +49,8 @@ npm run deploy:remote -- waldomacmini1          # remote only
 npm run deploy -- --remote=waldomacmini1        # local + remote in one run
 ```
 
-The remote step rsyncs the bundle, then on the remote re-resolves Node, re-signs
-(ad-hoc), clears quarantine, and registers it. Needs passwordless SSH (Remote
+The remote step uses the same release bundle, rsyncs it, then on the remote clears
+quarantine and registers it (a `--local-build` bundle is re-signed ad-hoc there). Needs passwordless SSH (Remote
 Login + `ssh-copy-id`) and a **matching CPU arch** — the Swift launcher is compiled
 for the build machine's architecture (both arm64 here).
 
