@@ -33,6 +33,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          check-latest: true   # the image cache lags Node security releases
           cache: npm
 
       - name: Tag must match package.json

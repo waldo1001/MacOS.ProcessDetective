@@ -24,6 +24,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          check-latest: true   # the image cache lags Node security releases
           cache: npm
 
       - run: npm ci --no-audit --no-fund
