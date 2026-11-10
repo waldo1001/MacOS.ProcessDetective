@@ -1,6 +1,6 @@
 {
   "name": "process-detective",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "macOS CPU/process detective — find out why that node process is eating your fans",
   "type": "module",
   "bin": {
