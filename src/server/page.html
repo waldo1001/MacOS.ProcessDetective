@@ -216,6 +216,7 @@ const state = {
   fsChurnResult:null,     // last FsChurnSnapshot (null = not yet run)
   readMeasuring:false,    // true while POST /api/readdelta/:pid is in-flight
   readResult:null,        // last ReadActivitySnapshot (null = not yet run)
+  battery:{ loading:false, loaded:false, data:null, error:null, sel:null, apps:null, appsKey:null, appsLoading:false, appsError:null }, // Energy tab: battery history (power log)
   health:{ report:null, fetchedAt:0, loading:false, error:null, job:null, open:new Set(), sortDir:-1, refreshTries:0, pollT:null, refreshT:null, copies:[], busy:null, actions:null, cleaned:0, sel:new Set(), askOn:false, modal:null, focusKey:null },
 };
 const H = []; // system series: {t,cpu,cpuUser,mem,netRx,netTx,energy,diskR,diskW}
@@ -560,6 +561,146 @@ function rMemory(){
     +'<div class="card"><div class="ctitle">TOP BY MEMORY</div>'+top.map(p=>procRow(p,'<span class="val">'+p.mem.toFixed(1)+'%</span>')).join("")+'</div>';
 }
 
+// ---------- battery history (Energy tab) ----------
+// Reads /api/battery (macOS power log, read-only). Loaded once on entering the tab; ↻ reloads. Not polled.
+const BAT_COLORS=["var(--warn)","var(--acc)","var(--calm)","var(--crit)","#a78bfa"];
+const DAYS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const p2=(n)=>String(n).padStart(2,"0");
+function fmtHM(ms){ const d=new Date(ms); return p2(d.getHours())+":"+p2(d.getMinutes()); }
+function fmtDayHM(ms){ return DAYS[new Date(ms).getDay()]+" "+fmtHM(ms); }
+function fmtMin(m){ m=Math.round(m); if(m<60) return m+" m"; return Math.floor(m/60)+" h "+(m%60)+" m"; }
+function fmtCpu(s){ return s<60?s.toFixed(0)+"s":s<3600?(s/60).toFixed(0)+"m":(s/3600).toFixed(1)+"h"; }
+function fmtCount(n){ return n>=1e6?(n/1e6).toFixed(1)+"M":n>=1e3?(n/1e3).toFixed(n>=1e4?0:1)+"k":String(Math.round(n)); }
+function timeTicks(t0,t1){
+  const hours=(t1-t0)/3600000; let step=24; for(const st of [1,2,3,6,12,24]){ if(hours/st<=8){ step=st; break; } }
+  const d=new Date(t0); d.setMinutes(0,0,0); d.setHours(d.getHours()+1);
+  const out=[]; let guard=0;
+  while(d.getTime()<=t1 && guard++<400){ if(d.getHours()%step===0) out.push(d.getTime()); d.setHours(d.getHours()+1); }
+  return out;
+}
+// Time-based chart (x = real time, unlike timeline() which is index-based): charge %, watts, shaded battery sessions, sleep ticks.
+function timeChart(samples, o){
+  o=o||{}; const W=600, Hh=o.h||150;
+  if(!samples.length) return '<div class="rsub" style="padding:8px 0">No battery samples in the log.</div>';
+  const t0=samples[0].t, t1=samples[samples.length-1].t, span=Math.max(1,t1-t0), gapMs=30*60000;
+  const X=(t)=>(t-t0)/span*W;
+  const wOn=(s)=>s.onBattery?s.watts:null; // watts only while on battery (charging draw would dwarf the drain)
+  const wmax=Math.max(1,...samples.map(s=>wOn(s)||0));
+  const path=(get,max)=>{ let d="",prev=null; samples.forEach(s=>{ const v=get(s); if(v==null){ prev=null; return; }
+    d+=((prev===null||s.t-prev>gapMs)?" M":" L")+X(s.t).toFixed(1)+" "+(Hh-clamp(v/max,0,1)*Hh).toFixed(1); prev=s.t; }); return d; };
+  let svg='<svg class="chart" viewBox="0 0 '+W+' '+Hh+'" height="'+Hh+'" preserveAspectRatio="none">';
+  [25,50,75].forEach(g=>{ const y=(Hh-g/100*Hh).toFixed(1); svg+='<line x1="0" x2="'+W+'" y1="'+y+'" y2="'+y+'" stroke="var(--bd)" stroke-width="1" vector-effect="non-scaling-stroke"/>'; });
+  (o.sessions||[]).forEach(s=>{ if(s.end<t0||s.start>t1) return; const x0=X(Math.max(s.start,t0)), w=Math.max(2,X(Math.min(s.end,t1))-x0);
+    svg+='<rect data-sess="'+esc(s.id)+'" x="'+x0.toFixed(1)+'" y="0" width="'+w.toFixed(1)+'" height="'+Hh+'" fill="var(--acc)" opacity="'+(s.id===o.sel?0.26:0.10)+'" style="cursor:pointer"><title>'+esc(fmtDayHM(s.start)+" → "+fmtHM(s.end)+" on battery")+'</title></rect>'; });
+  svg+='<path d="'+path(wOn,wmax)+'" fill="none" stroke="var(--warn)" stroke-width="1" opacity="0.8" vector-effect="non-scaling-stroke"/>';
+  svg+='<path d="'+path(s=>s.level,100)+'" fill="none" stroke="var(--calm)" stroke-width="1.8" vector-effect="non-scaling-stroke"/>';
+  (o.events||[]).forEach(e=>{ if(e.t<t0||e.t>t1) return; const crit=e.kind==="low-power-sleep"||e.kind==="battery-empty"; if(!crit&&e.kind!=="sleep") return;
+    const x=X(e.t).toFixed(1); svg+='<line x1="'+x+'" x2="'+x+'" y1="'+(Hh-(crit?14:7))+'" y2="'+Hh+'" stroke="'+(crit?"var(--crit)":"var(--mut)")+'" stroke-width="'+(crit?2:1)+'" vector-effect="non-scaling-stroke"><title>'+esc(fmtDayHM(e.t)+" · "+e.kind+(e.reason?" · "+e.reason:""))+'</title></line>'; });
+  svg+='</svg>';
+  const ticks=timeTicks(t0,t1).map(t=>{ const d=new Date(t); const lbl=d.getHours()===0?DAYS[d.getDay()]+" "+d.getDate():p2(d.getHours())+":00";
+    return '<span style="position:absolute;left:'+((t-t0)/span*100).toFixed(2)+'%;transform:translateX(-50%)">'+lbl+'</span>'; }).join("");
+  return '<div style="position:relative">'+svg
+    +'<span class="rsub" style="position:absolute;left:4px;top:0">100 %</span><span class="rsub" style="position:absolute;left:4px;bottom:0">0 %</span>'
+    +'<span class="rsub warn" style="position:absolute;right:4px;top:0">peak '+wmax.toFixed(0)+' W on battery (thin line)</span></div>'
+    +'<div class="rsub" style="position:relative;height:16px;margin-top:3px">'+ticks+'</div>';
+}
+async function batteryLoad(){
+  const b=state.battery; if(b.loading) return;
+  b.loading=true; b.error=null; render();
+  try{
+    const d=await fetchJSON("/api/battery"); if(d.error) throw new Error(d.error);
+    b.data=d;
+    if(!(b.sel==="last24"||d.sessions.some(s=>s.id===b.sel))) b.sel=d.sessions.length?d.sessions[0].id:"last24";
+  }catch(e){ b.error=String((e&&e.message)||e); }
+  b.loaded=true; b.loading=false; render();
+  if(b.data&&b.data.available) batteryLoadApps();
+}
+function batteryWindow(){
+  const b=state.battery, d=b.data; if(!d) return null;
+  const s=b.sel!=="last24"&&d.sessions.find(x=>x.id===b.sel);
+  if(s) return {key:s.id, from:s.start, to:s.end, drainedWh:s.drainedWh, session:s};
+  const to=Date.now(); return {key:"last24", from:to-86400000, to, drainedWh:null, session:null};
+}
+async function batteryLoadApps(){
+  const b=state.battery, w=batteryWindow(); if(!w) return;
+  b.appsKey=w.key; b.apps=null; b.appsError=null; b.appsLoading=true; render();
+  try{
+    const a=await fetchJSON("/api/battery/apps?from="+Math.round(w.from)+"&to="+Math.round(w.to)); if(a.error) throw new Error(a.error);
+    if(b.appsKey===w.key) b.apps=a;
+  }catch(e){ if(b.appsKey===w.key) b.appsError=String((e&&e.message)||e); }
+  if(b.appsKey===w.key){ b.appsLoading=false; render(); }
+}
+function batSessRow(s, sel){
+  const rate=s.awakeDrainPctPerHour!=null?s.awakeDrainPctPerHour:s.drainPctPerHour;
+  const dc=rate>25?"crit":rate>12?"warn":"calm";
+  const rateTxt=s.awakeDrainPctPerHour!=null?Math.round(s.awakeDrainPctPerHour)+' %/h awake ('+Math.round(s.drainPctPerHour)+' %/h overall)':s.drainPctPerHour.toFixed(0)+' %/h';
+  const endLbl={ac:"plugged in",empty:"ran empty",ongoing:"on battery now","data-end":"end of log"}[s.endedBy]||"";
+  const sleep=s.asleepMin!=null?" · asleep "+fmtMin(s.asleepMin)+" · "+s.darkWakes+" dark wakes":"";
+  return '<div class="row" data-sess="'+esc(s.id)+'" style="flex-wrap:wrap;gap:4px 10px'+(sel?';background:var(--surf2);box-shadow:inset 3px 0 0 var(--acc)':'')+'">'
+    +'<span class="nm">'+esc(fmtDayHM(s.start)+" → "+fmtHM(s.end))+'</span>'
+    +'<span class="rsub">'+Math.round(s.startLevel)+' % → '+Math.round(s.endLevel)+' % · '+esc(fmtMin(s.durationMin))+' · <span class="'+dc+'">'+esc(rateTxt)+'</span>'
+    +(s.avgWatts!=null?' · avg '+s.avgWatts.toFixed(0)+' W':'')+esc(sleep)+'</span>'
+    +'<span class="val '+(s.endedBy==="empty"?"crit":"mut")+'">'+esc(endLbl)+'</span></div>';
+}
+function batStack(a){
+  const keys=a.apps.filter(x=>x.key!=="other").slice(0,5), nb=a.buckets.length; if(!nb) return "";
+  const maxT=Math.max(0.001,...a.buckets.map(x=>x.totalWh)), W=600, Hh=110, bw=W/nb;
+  let svg='<svg class="chart" viewBox="0 0 '+W+' '+Hh+'" height="'+Hh+'" preserveAspectRatio="none">';
+  a.buckets.forEach((bk,i)=>{
+    const x=i*bw; let y=Hh, rects="", tip=fmtDayHM(bk.t)+" · "+bk.totalWh.toFixed(2)+" Wh";
+    keys.map((k,j)=>[k.name,BAT_COLORS[j],bk.byApp[k.key]||0]).concat([["Other","var(--mut)",bk.byApp.other||0]]).forEach(p=>{
+      if(p[2]>0) tip+="\n"+p[0]+" "+p[2].toFixed(2)+" Wh";
+      const h=p[2]/maxT*Hh; if(h<=0) return; y-=h;
+      rects+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+Math.max(0.5,bw-0.8).toFixed(1)+'" height="'+h.toFixed(1)+'" fill="'+p[1]+'"/>'; });
+    svg+='<g><title>'+esc(tip)+'</title>'+rects+'<rect x="'+x.toFixed(1)+'" y="0" width="'+bw.toFixed(1)+'" height="'+Hh+'" fill="transparent"/></g>';
+  });
+  svg+='</svg>';
+  const leg=keys.map((k,j)=>'<span><i style="background:'+BAT_COLORS[j]+'"></i>'+esc(k.name)+'</span>').join("")+'<span><i style="background:var(--mut)"></i>Other</span>';
+  return '<div class="ctitle" style="margin-top:12px">OVER TIME<span class="note">15-minute buckets · hover for detail · tallest = '+maxT.toFixed(2)+' Wh</span></div>'
+    +svg+'<div class="rsub" style="display:flex;justify-content:space-between"><span>'+esc(fmtDayHM(a.buckets[0].t))+'</span><span>'+esc(fmtHM(a.buckets[nb-1].t+900000))+'</span></div>'
+    +'<div class="legend">'+leg+'</div>';
+}
+function batPanel(){
+  const b=state.battery, w=batteryWindow(), a=b.apps;
+  if(b.appsError) return '<div class="rsub crit" style="padding:6px 0">'+esc(b.appsError)+'</div>';
+  if(!a||b.appsLoading) return '<div class="rsub" style="padding:6px 0">Reading app energy…</div>';
+  const list=a.apps.filter(x=>x.key!=="other").slice(0,12);
+  if(!list.length) return '<div class="rsub" style="padding:6px 0">No per-app energy recorded for this window.</div>';
+  const dr=w&&w.drainedWh!=null?" of "+w.drainedWh.toFixed(1)+" Wh drained":"";
+  const rows=list.map(x=>{
+    return '<div class="row" style="cursor:default" title="'+esc((x.description?x.description+" — ":"")+x.key)+'">'
+      +'<div style="flex:0 0 270px;min-width:0"><div class="nm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(x.name)+'</div>'
+      +(x.description?'<div class="rsub" style="white-space:normal">'+esc(x.description)+'</div>':'')
+      +'<div class="rsub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.7">'+esc(x.key)+'</div></div>'
+      +'<div class="bar" style="flex:1;min-width:40px"><span style="width:'+clamp(x.sharePct,0,100).toFixed(1)+'%;background:var(--warn)"></span></div>'
+      +'<span class="val" style="width:44px;text-align:right;margin-left:0">'+x.sharePct.toFixed(0)+'%</span>'
+      +'<span class="val mut" style="width:62px;text-align:right;margin-left:0">'+x.energyWh.toFixed(2)+' Wh</span>'
+      +'<span class="rsub" style="width:58px;text-align:right">cpu '+esc(fmtCpu(x.cpuSec))+'</span>'
+      +'<span class="rsub" style="width:60px;text-align:right">'+esc(fmtCount(x.wakeups))+' wk</span></div>'; }).join("");
+  const dw=w&&w.session&&w.session.topDarkWakeReasons&&w.session.topDarkWakeReasons.length
+    ?'<div class="ctitle" style="margin-top:12px">DARK WAKES WHILE ASLEEP</div>'+w.session.topDarkWakeReasons.map(r=>'<div class="row" style="cursor:default"><span class="rsub" style="white-space:normal;word-break:break-all">'+esc(r.reason)+'</span><span class="val mut">'+r.count+'×</span></div>').join(""):"";
+  return '<div class="rsub" style="margin:2px 0 8px;white-space:normal"><span class="acc">Apps used '+a.attributedWh.toFixed(1)+' Wh'+dr+'</span> — the rest is display, chip idle and radios, which macOS does not attribute per app.</div>'
+    +rows+batStack(a)+dw;
+}
+function batteryCard(){
+  const b=state.battery, d=b.data;
+  const head='<div class="ctitle">BATTERY HISTORY<span class="note">macOS power log · read-only · no admin</span><button class="btn" id="batReload" title="Reload" style="padding:2px 8px;font-size:11px">↻</button></div>';
+  let body;
+  if(b.loading&&!d) body='<div class="rsub" style="padding:6px 0">Reading the macOS power log…</div>';
+  else if(b.error) body='<div class="rsub crit" style="padding:6px 0">'+esc(b.error)+'</div>';
+  else if(!d) body='<div class="rsub" style="padding:6px 0">Reading the macOS power log…</div>';
+  else if(!d.available) body='<div class="rsub mut" style="padding:6px 0">'+esc(d.note||"unavailable")+'</div>';
+  else {
+    const sessRows=d.sessions.map(s=>batSessRow(s,b.sel===s.id)).join("")
+      +'<div class="row" data-sess="last24" style="'+(b.sel==="last24"?'background:var(--surf2);box-shadow:inset 3px 0 0 var(--acc)':'')+'"><span class="nm">Last 24 hours</span><span class="rsub">all apps, on battery or AC</span></div>';
+    body=(d.note?'<div class="rsub warn" style="margin-bottom:6px">'+esc(d.note)+'</div>':'')
+      +(d.hasBattery?timeChart(d.samples,{sessions:d.sessions,events:d.events,sel:b.sel,h:150}):'<div class="rsub" style="padding:4px 0">No battery in this Mac — showing app energy only.</div>')
+      +'<div style="margin:8px 0">'+sessRows+'</div>'
+      +'<div class="ctitle" style="margin-top:6px">'+(b.sel==="last24"?"LAST 24 HOURS":"SELECTED DISCHARGE")+' · WHICH APPS USED THE ENERGY</div>'+batPanel();
+  }
+  return '<div class="card" id="batteryHistory" style="margin-bottom:10px">'+head+body+'</div>';
+}
+
 function rEnergy(){
   const s=state.sys, pw=s.power;
   const ranked=[...state.procs].filter(p=>p.energy!=null).sort((a,b)=>(b.energy||0)-(a.energy||0)).slice(0,8);
@@ -591,6 +732,7 @@ function rEnergy(){
       +'<div class="tile"><div class="lbl">Thermal pressure</div><span class="big '+(pw.thermalNominal?"calm":"warn")+'">'+(pw.thermalNominal?"NOMINAL":"LIMITED")+'</span><div class="sub">pmset -g therm</div></div>'
       +'<div class="tile card dashed"><div class="lbl">Fan RPM</div><span class="big mut">— — —</span><div class="sub">requires elevated access (SMC)</div></div>'
     +'</div>'
+    +batteryCard()
     +'<div class="card" data-scrub="en" style="margin-bottom:10px"><div class="ctitle">TOTAL ENERGY IMPACT · LAST 15 MIN<span class="note">live-only · not persisted</span>'+scrubReadout("en",H,s=>s.energy.toFixed(1))+'</div>'+timeline(H,[{get:s=>s.energy,color:"var(--warn)",area:true}],{id:"en",h:160})+'</div>'
     +'<div class="card" style="margin-bottom:10px"><div class="ctitle">ENERGY IMPACT RANKING</div>'+ranked.map(p=>'<div class="row" data-proc="'+p.pid+'"><div style="width:150px"><div class="nm">'+esc(p.name)+'</div><div class="rsub">'+p.pid+'</div></div>'
       +'<div class="bar" style="flex:1"><span style="width:'+((p.energy||0)/maxE*100)+'%;background:var(--warn)"></span></div><span class="val warn">'+(p.energy||0).toFixed(1)+'</span></div>').join("")+'</div>'
@@ -1106,6 +1248,9 @@ function bindAfter(){
     const cs=$("copySys"); if(cs)cs.onclick=()=>{ navigator.clipboard.writeText(systemReport()).then(()=>toast("System report copied")); };
   }
   if(route.section==="energy"){
+    $("view").querySelectorAll("[data-sess]").forEach(el=>el.onclick=()=>{ if(state.battery.sel===el.dataset.sess) return; state.battery.sel=el.dataset.sess; batteryLoadApps(); });
+    const br=$("batReload"); if(br) br.onclick=()=>{ state.battery.loaded=false; state.battery.loading=false; batteryLoad(); };
+    if(!state.battery.loaded && !state.battery.loading) batteryLoad();
     const pb=$("powerBtn"); if(pb)pb.onclick=async()=>{
       state.powerMeasuring=true; render();
       try{

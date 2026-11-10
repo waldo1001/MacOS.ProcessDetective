@@ -17,6 +17,13 @@ import type { HistoryStore } from '../history/collector.js';
 import { RANGES } from '../history/store.js';
 import { handleHealthRoute } from './health-routes.js';
 import { checkRequest } from './guard.js';
+import {
+  buildAppsPayload,
+  buildBatteryPayload,
+  loadPowerlog,
+  parseRange,
+  powerlogDir,
+} from '../collect/powerlog.js';
 
 /** The single-page app, loaded once at startup (copied next to this module by the build). */
 const PAGE = readFileSync(fileURLToPath(new URL('./page.html', import.meta.url)), 'utf8');
@@ -100,6 +107,18 @@ export function startServer(
           cadenceMs: historyStore.config.intervalMs,
           retentionDays: historyStore.config.retentionDays,
         });
+      }
+
+      // Battery history: read-only, from the macOS power log (temp copies) and `pmset -g log`.
+      if (url.pathname === '/api/battery' && req.method === 'GET') {
+        const data = await loadPowerlog();
+        return json(res, 200, buildBatteryPayload(data, powerlogDir(), Date.now()));
+      }
+      if (url.pathname === '/api/battery/apps' && req.method === 'GET') {
+        const range = parseRange(url.searchParams.get('from'), url.searchParams.get('to'));
+        if ('error' in range) return json(res, 400, { error: range.error });
+        const data = await loadPowerlog();
+        return json(res, 200, buildAppsPayload(data, range.from, range.to));
       }
 
       const m = url.pathname.match(/^\/api\/inspect\/(\d+)$/);

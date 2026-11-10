@@ -1,0 +1,16 @@
+create table PLBatteryAgent_EventBackward_Battery (ID integer primary key, timestamp real, Level real, ExternalConnected integer, IsCharging integer, InstantAmperage integer, Voltage integer, AppleRawCurrentCapacity integer);
+create table PLCoalitionAgent_EventInterval_CoalitionInterval (ID integer primary key, timestamp real, BundleId text, LaunchdName text, energy integer, cpu_time real, gpu_energy_nj integer, interrupt_wakeups real);
+insert into PLBatteryAgent_EventBackward_Battery (timestamp, Level, ExternalConnected, IsCharging, InstantAmperage, Voltage, AppleRawCurrentCapacity) values (1767225600.5, 100, 1, 0, 2000, 11000, 5000);
+insert into PLBatteryAgent_EventBackward_Battery (timestamp, Level, ExternalConnected, IsCharging, InstantAmperage, Voltage, AppleRawCurrentCapacity) values (1767225660.5, 100, 1, 0, 2000, 11000, 5000);
+insert into PLBatteryAgent_EventBackward_Battery (timestamp, Level, ExternalConnected, IsCharging, InstantAmperage, Voltage, AppleRawCurrentCapacity) values (1767225720.5, 100, 1, 0, 2000, 11000, 5000);
+insert into PLBatteryAgent_EventBackward_Battery (timestamp, Level, ExternalConnected, IsCharging, InstantAmperage, Voltage, AppleRawCurrentCapacity) values (1767225780.5, 100, 1, 0, 2000, 11000, 5000);
+insert into PLBatteryAgent_EventBackward_Battery (timestamp, Level, ExternalConnected, IsCharging, InstantAmperage, Voltage, AppleRawCurrentCapacity) values (1767225840.5, 100, 0, 0, -1000, 11000, 5000);
+insert into PLBatteryAgent_EventBackward_Battery (timestamp, Level, ExternalConnected, IsCharging, InstantAmperage, Voltage, AppleRawCurrentCapacity) values (1767225900.5, 99, 0, 0, -1000, 11000, 4950);
+insert into PLBatteryAgent_EventBackward_Battery (timestamp, Level, ExternalConnected, IsCharging, InstantAmperage, Voltage, AppleRawCurrentCapacity) values (1767225960.5, 98, 0, 0, -1000, 11000, 4900);
+insert into PLBatteryAgent_EventBackward_Battery (timestamp, Level, ExternalConnected, IsCharging, InstantAmperage, Voltage, AppleRawCurrentCapacity) values (1767226020.5, 97, 0, 0, -1000, 11000, 4850);
+insert into PLBatteryAgent_EventBackward_Battery (timestamp, Level, ExternalConnected, IsCharging, InstantAmperage, Voltage, AppleRawCurrentCapacity) values (1767226080.5, 96, 0, 0, -1000, 11000, 4800);
+insert into PLBatteryAgent_EventBackward_Battery (timestamp, Level, ExternalConnected, IsCharging, InstantAmperage, Voltage, AppleRawCurrentCapacity) values (1767226140.5, 95, 0, 0, -1000, 11000, 4750);
+insert into PLCoalitionAgent_EventInterval_CoalitionInterval (timestamp, BundleId, LaunchdName, energy, cpu_time, gpu_energy_nj, interrupt_wakeups) values (1767225700, 'com.example.agents', 'application.com.example.agents.100.101', 3600000000000, 10, 0, 5);
+insert into PLCoalitionAgent_EventInterval_CoalitionInterval (timestamp, BundleId, LaunchdName, energy, cpu_time, gpu_energy_nj, interrupt_wakeups) values (1767225800, 'com.example.agents', 'application.com.example.agents.100.101', 3600000000000, 10, 0, 5);
+create table PLApplicationAgent_EventNone_AppInfo (ID integer primary key, timestamp real, BundleID text, CFDisplayName text, LSDisplayName text, Name text);
+insert into PLApplicationAgent_EventNone_AppInfo (timestamp, BundleID, CFDisplayName, LSDisplayName, Name) values (1767225610.5, 'com.example.agents', NULL, 'Old Agents Name', NULL);

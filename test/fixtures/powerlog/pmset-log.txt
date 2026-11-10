@@ -1,0 +1,20 @@
+2026-11-09 22:10:01 +0100 Assertions          	PID 123(powerd) Created InternalPreventSleep "example" 00:00:00 id:0x1
+2026-11-09 22:10:05 +0100 Wake Requests       	[*process=example request=Maintenance Wake deltaSecs=3600 wakeTime=2026-11-09 23:10:05 +0100]
+2026-11-09 22:10:09 +0100 Kernel Client Acks  	Wake Acknowledgement : 0x0
+2026-11-10 07:33:25 +0100 Sleep               	Entering Sleep state due to 'Clamshell Sleep':TCPKeepAlive=active Using Batt (Charge:100%) 494 secs
+2026-11-10 07:33:26 +0100 Assertions          	PID 124(powerd) Released InternalPreventSleep "example" 00:00:01 id:0x1
+2026-11-10 07:41:39 +0100 DarkWake            	DarkWake from Deep Idle [CDNP] : due to smc.sysState.Wake(0x70070000) wifibt SMC.OutboxNotEmpty centauri-alpha E_CONNECTION_LOSS ARPT/ Using BATT (Charge:100%) 45 secs
+2026-11-10 07:42:24 +0100 Sleep               	Entering Sleep state due to 'Maintenance Sleep':TCPKeepAlive=active Using Batt (Charge:99%) 3 secs
+2026-11-10 07:50:02 +0100 Wake Requests       	[*process=example request=Maintenance Wake deltaSecs=600 wakeTime=2026-11-10 08:00:02 +0100]
+2026-11-10 08:00:10 +0100 DarkWake            	DarkWake from Deep Idle [CDNP] : due to smc.sysState.Wake(0x70070000) wifibt SMC.OutboxNotEmpty ARPT/ Using BATT (Charge:99%) 30 secs
+2026-11-10 08:00:40 +0100 Sleep               	Entering Sleep state due to 'Maintenance Sleep':TCPKeepAlive=active Using Batt (Charge:99%) 2 secs
+2026-11-10 08:51:22 +0100 Wake                	DarkWake to FullWake from Deep Idle [CDNVA] : due to UserActivity Assertion Using BATT (Charge:100%)
+2026-11-10 08:51:23 +0100 Kernel Client Acks  	Wake Acknowledgement : 0x0
+2026-11-10 08:52:00 +0100 Assertions          	PID 125(example) Created PreventUserIdleSystemSleep "example" 00:00:00 id:0x2
+2026-11-10 09:15:00 +0100 Assertions          	PID 125(example) Released PreventUserIdleSystemSleep "example" 00:23:00 id:0x2
+2026-11-10 10:42:50 +0100 Sleep               	Entering Sleep state due to 'Low Power Sleep':TCPKeepAlive=inactive Using Batt (Charge:1%) 47 secs
+2026-11-10 10:43:38 +0100 Wake                	Wake from Deep Idle [CDNVA] : due to UserActivity Assertion Using AC (Charge:1%)
+2026-11-10 10:43:40 +0100 Assertions          	PID 126(example) Created PreventUserIdleSystemSleep "example" 00:00:00 id:0x3
+2026-11-04 12:00:00 -0700 Sleep               	Entering Sleep state due to 'Idle Sleep':TCPKeepAlive=active Using AC (Charge:87%) 12 secs
+2026-11-04 12:30:15 -0700 DarkWake            	DarkWake from Normal Sleep [CDNP] : due to EC.LidOpen/ Using AC (Charge:87%) 20 secs
+2026-11-04 12:31:00 -0700 Wake Requests       	[*process=example request=Maintenance Wake deltaSecs=1800 wakeTime=2026-11-04 13:01:00 -0700]
