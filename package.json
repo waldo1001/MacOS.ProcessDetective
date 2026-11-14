@@ -28,8 +28,8 @@
     "ship": "bash scripts/ship.sh"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.131.0",
-    "commander": "^15.0.0"
+    "@anthropic-ai/sdk": "^1.8.0",
+    "commander": "^15.1.0"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
